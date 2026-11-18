@@ -22,6 +22,11 @@ final class AppModel {
     private(set) var connectionState = ConnectionState.connecting
     private(set) var connection: CoreConnection?
     private(set) var machines: [Machine] = []
+    /// Machines that the core does not connect to until the user resumes them. The core cannot pause a machine,
+    /// thus Shep removes it from the core and keeps how to add it again.
+    private(set) var pausedMachines: [Machine] = AppModel.storedPausedMachines() {
+        didSet { UserDefaults.standard.set(try? JSONEncoder().encode(pausedMachines), forKey: SettingsKey.pausedMachines) }
+    }
     var isSidebarVisible = true
     var isPaletteVisible = false
     @ObservationIgnored private let alerts = Alerts()
@@ -164,9 +169,13 @@ final class AppModel {
 
     /// Adds a machine by its SSH target. Returns the error text, or nil if the machine was added.
     func addMachine(target: String) async -> String? {
+        await addMachine(["target": .string(target)])
+    }
+
+    private func addMachine(_ parameters: JSONValue) async -> String? {
         guard let connection else { return "Shep has no connection to herdr-core." }
         do {
-            _ = try await connection.call("machine.add", ["target": .string(target)], timeout: .seconds(60))
+            _ = try await connection.call("machine.add", parameters, timeout: .seconds(60))
             return nil
         } catch {
             let error = error as? CoreError
@@ -175,7 +184,27 @@ final class AppModel {
     }
 
     func removeMachine(_ machine: Machine) {
-        Task { _ = try? await connection?.call("machine.rm", ["name": .string(machine.name)]) }
+        pausedMachines.removeAll { $0.name == machine.name }
+        Task { _ = try? await connection?.call("machine.rm", ["machine": .string(machine.name)]) }
+    }
+
+    /// Stops the connection to a machine. Its terminals continue to run there.
+    func pauseMachine(_ machine: Machine) {
+        guard let connection, !pausedMachines.contains(where: { $0.name == machine.name }) else { return }
+        pausedMachines.append(machine)
+        Task { _ = try? await connection.call("machine.rm", ["machine": .string(machine.name)]) }
+    }
+
+    /// Connects to a paused machine again. Returns the error text, or nil if the machine was added.
+    func resumeMachine(_ machine: Machine) async -> String? {
+        let error = await addMachine(machine.addParameters)
+        if error == nil { pausedMachines.removeAll { $0.name == machine.name } }
+        return error
+    }
+
+    private static func storedPausedMachines() -> [Machine] {
+        guard let data = UserDefaults.standard.data(forKey: SettingsKey.pausedMachines) else { return [] }
+        return (try? JSONDecoder().decode([Machine].self, from: data)) ?? []
     }
 
     // MARK: Commands
@@ -493,6 +522,12 @@ final class AppModel {
                 let new = Machine.list(from: result)
                 let connected = { (machines: [Machine]) in Set(machines.filter { $0.state == .connected }.map(\.name)) }
                 let newlyConnected = connected(new).subtracting(connected(machines))
+                // A machine that came back to the core, for example added in Herdr, is not paused.
+                // Only a new name counts: a list from before the pause can still have the paused machine.
+                let added = Set(new.map(\.name)).subtracting(machines.map(\.name))
+                if pausedMachines.contains(where: { added.contains($0.name) }) {
+                    pausedMachines.removeAll { added.contains($0.name) }
+                }
                 if new != machines { machines = new }
                 layout.keepOnly(machines: connected(new))
                 for name in newlyConnected { await layout.load(machine: name) }

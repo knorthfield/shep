@@ -55,6 +55,8 @@ final class TerminalView: NSView {
         cellSize = CGSize(width: advance.rounded(.up), height: ascent + descent + CTFontGetLeading(regular).rounded(.up))
         baseline = ascent
         super.init(frame: .zero)
+        // Without this, AppKit can give `draw` an area larger than the view, and the background hides the views near it.
+        clipsToBounds = true
         applyAppearanceColors()
     }
 

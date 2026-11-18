@@ -15,6 +15,15 @@ struct MachinesTests {
         ])
     }
 
+    @Test func aPausedMachineIsAddedAgainWithItsNameSessionAndCommand() {
+        let machines = Machine.list(from: ["machines": [
+            ["name": "quarterdeck", "target": "quarterdeck", "state": "connected", "session": "work"],
+            ["name": "fly", "target": "fly ssh console -C", "state": "connected", "via": true],
+        ]])
+        #expect(machines[0].addParameters == ["name": "quarterdeck", "target": "quarterdeck", "session": "work"])
+        #expect(machines[1].addParameters == ["name": "fly", "via": "fly ssh console -C"])
+    }
+
     @Test func aTerminalAddressOfAMachineBecomesLocalForThatMachine() {
         #expect(LayoutDocument.localID("box/t7", machine: "box") == "t7")
         #expect(LayoutDocument.localID("t7", machine: nil) == "t7")

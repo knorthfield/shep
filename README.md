@@ -11,7 +11,8 @@ Shows and controls the terminals and coding agents that [herdr-core](https://git
 - **Agents.** The sidebar shows each agent and its status: working, done, or needs you. A sound and
   a notification tell you when an agent needs you or stops work.
 - **Machines.** Add a computer that you connect to with SSH. Its spaces and agents show with those
-  of this Mac.
+  of this Mac. Pause a machine to stop the connection to it, for example
+  so that a virtual machine can sleep; resume it when you need it again.
 - **Shared with Herdr.** Shep uses the same layout and labels as the
   [Herdr](https://github.com/herdrdev/herdr-app) app. You can open Herdr and Shep on the same
   terminals, and an agent that you saw in one is seen in the other.

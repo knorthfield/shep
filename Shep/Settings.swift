@@ -7,6 +7,7 @@ enum SettingsKey {
     static let playsSounds = "PlaysSounds"
     static let showsNotifications = "ShowsNotifications"
     static let fontSize = "FontSize"
+    static let pausedMachines = "PausedMachines"
 
     static let standardFontSize = 13.0
 
@@ -24,6 +25,7 @@ struct SettingsView: View {
     @State private var newMachineTarget = ""
     @State private var machineError: String?
     @State private var isAddingMachine = false
+    @State private var resumingMachine: String?
 
     var body: some View {
         Form {
@@ -51,11 +53,21 @@ struct SettingsView: View {
                     LabeledContent(machine.name) {
                         Text(Self.description(of: machine))
                             .foregroundStyle(machine.state == .connected ? .secondary : .primary)
+                        Button("Pause") { model.pauseMachine(machine) }
+                        Button("Remove") { model.removeMachine(machine) }
+                    }
+                }
+                ForEach(model.pausedMachines) { machine in
+                    LabeledContent(machine.name) {
+                        Text(resumingMachine == machine.name ? "Connecting…" : "Paused")
+                            .foregroundStyle(.secondary)
+                        Button("Resume") { resume(machine) }
+                            .disabled(resumingMachine != nil)
                         Button("Remove") { model.removeMachine(machine) }
                     }
                 }
                 LabeledContent("Add a machine") {
-                    TextField("user@host", text: $newMachineTarget)
+                    TextField("SSH target", text: $newMachineTarget, prompt: Text("user@host"))
                         .labelsHidden()
                         .frame(width: 180)
                         .onSubmit(addMachine)
@@ -69,7 +81,7 @@ struct SettingsView: View {
             } header: {
                 Text("Machines")
             } footer: {
-                Text("A machine is a computer that you connect to with SSH, as in `ssh user@host`. It must have herdr-core. Its spaces and agents show in the sidebar.")
+                Text("A machine is a computer that you connect to with SSH, as in `ssh user@host`. It must have herdr-core. Its spaces and agents show in the sidebar. Pause a machine to stop the connection to it: its terminals continue to run, and they show again when you resume it.")
                     .foregroundStyle(.secondary)
             }
 
@@ -104,6 +116,15 @@ struct SettingsView: View {
             machineError = await model.addMachine(target: newMachineTarget)
             if machineError == nil { newMachineTarget = "" }
             isAddingMachine = false
+        }
+    }
+
+    private func resume(_ machine: Machine) {
+        resumingMachine = machine.name
+        machineError = nil
+        Task {
+            machineError = await model.resumeMachine(machine)
+            resumingMachine = nil
         }
     }
 }
