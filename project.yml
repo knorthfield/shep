@@ -1,0 +1,56 @@
+name: Shep
+options:
+  bundleIdPrefix: com.krisnorthfield
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+configFiles:
+  Debug: Local.xcconfig
+  Release: Local.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    GENERATE_INFOPLIST_FILE: NO
+    ENABLE_HARDENED_RUNTIME: YES
+    # Apple Silicon only. Support: the current macOS and the one before it (now 27 and 26).
+    ARCHS: arm64
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+packages:
+  GhosttyVt:
+    path: Vendor/GhosttyVt
+targets:
+  Shep:
+    type: application
+    platform: macOS
+    sources:
+      - Shep
+    info:
+      path: Shep/Info.plist
+      properties:
+        CFBundleDisplayName: Shep
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSApplicationCategoryType: public.app-category.developer-tools
+    dependencies:
+      - package: GhosttyVt
+  ShepTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - ShepTests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: Shep
+schemes:
+  Shep:
+    build:
+      targets:
+        Shep: all
+    test:
+      targets:
+        - ShepTests

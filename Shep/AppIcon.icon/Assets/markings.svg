@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <g fill="none" stroke="#F4F1E9" stroke-width="26" stroke-linecap="round" stroke-linejoin="round">
+    <!-- The terminal prompt, where the eye is. -->
+    <path d="M414 452 L458 482 L414 512"/>
+    <path d="M488 512 L544 512"/>
+    <!-- The white collar of the collie. -->
+    <path d="M716 372 C690 500 620 606 486 664"/>
+    <!-- The fold of the ear. -->
+    <path d="M560 178 C590 196 622 240 650 292"/>
+  </g>
+</svg>
