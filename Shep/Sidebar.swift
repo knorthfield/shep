@@ -89,6 +89,9 @@ struct Sidebar: View {
                     .lineLimit(nil)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer()
+                if let counts = model.gitCounts[space.id] {
+                    GitCountsLabel(counts: counts)
+                }
                 StatusDot(status: model.status(of: space))
             }
             .tag(space.id)
@@ -121,6 +124,8 @@ struct Sidebar: View {
             if groups.isEmpty {
                 Text("No agent status yet. Agents show here when they report their status.")
                     .font(.caption)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
                     .foregroundStyle(.secondary)
                     .selectionDisabled()
             }
@@ -156,33 +161,36 @@ struct Sidebar: View {
         Button {
             model.show(terminal: terminal.address)
         } label: {
-            HStack(spacing: 6) {
+            // Each piece of information has its own line. The status is on the first line.
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Image(systemName: "sparkle")
                     .foregroundStyle(.orange)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(agentTitle(terminal))
-                        .lineLimit(nil)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text([terminal.programName, terminal.machine].compactMap { $0 }.joined(separator: " · "))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(nil)
-                        .fixedSize(horizontal: false, vertical: true)
+                    let names = agentNames(terminal)
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        agentLine(names.first ?? "")
+                        Spacer(minLength: 0)
+                        if Attention.isPinned(terminal) {
+                            Image(systemName: "pin.fill")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        if let date = terminal.statusChangeDate {
+                            Text(Attention.age(since: date))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                                .fixedSize()
+                        }
+                        StatusDot(status: Attention.status(of: terminal), showsIdle: true)
+                    }
+                    ForEach(names.dropFirst(), id: \.self) { agentLine($0) }
+                    ForEach([terminal.programName, terminal.machine].compactMap { $0 }, id: \.self) { detail in
+                        agentLine(detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                Spacer()
-                if Attention.isPinned(terminal) {
-                    Image(systemName: "pin.fill")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                if let date = terminal.statusChangeDate {
-                    Text(Attention.age(since: date))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                        .fixedSize()
-                }
-                StatusDot(status: Attention.status(of: terminal), showsIdle: true)
             }
             .padding(.leading, isSubAgent ? 14 : 0)
             .contentShape(.rect)
@@ -198,9 +206,16 @@ struct Sidebar: View {
     }
 
     /// The space of the agent, then what the agent does.
-    private func agentTitle(_ terminal: TerminalRecord) -> String {
+    private func agentNames(_ terminal: TerminalRecord) -> [String] {
         let space = model.space(of: terminal).map(model.displayName(of:))
-        return [space, terminal.displayName].compactMap { $0 }.joined(separator: " · ")
+        return [space, terminal.displayName].compactMap { $0 }
+    }
+
+    /// A line of an agent row. A line that is too long for the sidebar wraps: a list row on macOS has a limit of one line.
+    private func agentLine(_ text: String) -> some View {
+        Text(text)
+            .lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     // MARK: Footer
@@ -337,6 +352,36 @@ struct SpaceBadge: View {
     static func color(for spaceID: String) -> Color {
         let hash = spaceID.utf8.reduce(UInt32(2_166_136_261)) { ($0 ^ UInt32($1)) &* 16_777_619 }
         return colors[Int(hash % UInt32(colors.count))]
+    }
+}
+
+/// The number of commits that are not pushed (up, green) and not pulled (down, red). A count of zero does not show.
+private struct GitCountsLabel: View {
+    let counts: GitCounts
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if counts.ahead > 0 {
+                count(counts.ahead, symbol: "arrow.up", color: .green, label: "\(counts.ahead) commits not pushed")
+            }
+            if counts.behind > 0 {
+                count(counts.behind, symbol: "arrow.down", color: .red, label: "\(counts.behind) commits not pulled")
+            }
+        }
+        .font(.caption)
+        .monospacedDigit()
+        .fixedSize()
+    }
+
+    private func count(_ number: Int, symbol: String, color: Color, label: String) -> some View {
+        HStack(spacing: 1) {
+            Image(systemName: symbol)
+            Text(String(number))
+        }
+        .foregroundStyle(color)
+        .help(label)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
     }
 }
 

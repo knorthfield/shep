@@ -6,7 +6,7 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: sidebarVisibility) {
             Sidebar(model: model)
-                .navigationSplitViewColumnWidth(min: 180, ideal: 220)
+                .navigationSplitViewColumnWidth(min: 220, ideal: 280)
         } detail: {
             detail
         }
@@ -29,10 +29,10 @@ struct ContentView: View {
             Button("⇧⌘P  Commands") { model.isPaletteVisible = true }
                 .buttonStyle(.plain)
         }
-        .font(.callout)
+        .font(.body)
         .foregroundStyle(.secondary)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
         .fixedSize(horizontal: false, vertical: true)
     }
 

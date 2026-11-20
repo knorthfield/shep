@@ -16,6 +16,7 @@ final class AppModel {
 
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Shep", category: "AppModel")
     private static let machinePollInterval = Duration.milliseconds(2500)
+    private static let gitPollInterval = Duration.seconds(10)
 
     let terminals = TerminalStore()
     let layout = LayoutStore()
@@ -31,6 +32,8 @@ final class AppModel {
     var sidebarMachines: [(machine: Machine, isPaused: Bool)] {
         Machine.sidebarList(active: machines, paused: pausedMachines)
     }
+    /// The commits that are not pushed and not pulled in the folder of each space, by space id.
+    private(set) var gitCounts: [String: GitCounts] = [:]
     /// The name of the paused machine that Shep connects to again now.
     private(set) var resumingMachine: String?
     /// The pane that the Settings window shows.
@@ -90,15 +93,20 @@ final class AppModel {
     /// or of the folder where the space was made. This is the rule of Herdr.
     func displayName(of space: LayoutDocument.Space) -> String {
         if !space.name.isEmpty { return space.name }
-        let liveFolder = space.tabs.lazy.flatMap(\.terminals)
-            .compactMap { self.terminals.terminals[$0]?.workingFolder }.first { !$0.isEmpty }
-        let folder = liveFolder ?? space.folder
+        let folder = folder(of: space)
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         if folder.isEmpty || folder == home { return "~" }
         return URL(fileURLWithPath: folder).lastPathComponent
     }
 
     /// The name of a tab: its name, or the name of its first terminal, or its number.
+    /// The folder where the first terminal of a space is now, or the folder where the space was made.
+    private func folder(of space: LayoutDocument.Space) -> String {
+        let liveFolder = space.tabs.lazy.flatMap(\.terminals)
+            .compactMap { self.terminals.terminals[$0]?.workingFolder }.first { !$0.isEmpty }
+        return liveFolder ?? space.folder
+    }
+
     func displayName(of tab: LayoutDocument.Tab, in space: LayoutDocument.Space) -> String {
         if !tab.name.isEmpty { return tab.name }
         if let terminal = tab.terminals.first.flatMap({ terminals.terminals[$0] }) { return terminal.displayName }
@@ -463,6 +471,7 @@ final class AppModel {
                 Task { await readEvents(from: connection, channel: UInt32(channel)) }
             }
             Task { await pollMachines(on: connection) }
+            Task { await pollGitCounts(on: connection) }
         } catch {
             Self.logger.error("Connection to herdr-core failed: \(error)")
             connectionState = .failed(message: (error as? CoreError)?.message ?? error.localizedDescription)
@@ -526,6 +535,8 @@ final class AppModel {
         case "turn":
             // An agent stopped work. If it is on the screen, a person saw this turn.
             markVisibleAgentsSeen()
+            // The agent possibly made a commit or a push.
+            if let connection { Task { await readGitCounts(on: connection) } }
         default:
             break
         }
@@ -542,6 +553,31 @@ final class AppModel {
             await readMachines(on: connection)
             try? await Task.sleep(for: Self.machinePollInterval)
         }
+    }
+
+    /// Reads the git counts again and again, while this connection is the current one and Shep is the active app.
+    private func pollGitCounts(on connection: CoreConnection) async {
+        while self.connection === connection {
+            if NSApp.isActive || gitCounts.isEmpty { await readGitCounts(on: connection) }
+            try? await Task.sleep(for: Self.gitPollInterval)
+        }
+    }
+
+    private func readGitCounts(on connection: CoreConnection) async {
+        var new: [String: GitCounts] = [:]
+        for space in spaces {
+            let folder = folder(of: space)
+            guard !folder.isEmpty else { continue }
+            var parameters: JSONValue = ["argv": .array(GitCounts.command.map { .string($0) }), "cwd": .string(folder), "timeout": 10]
+            if let machine = space.machine { parameters["on"] = .string(machine) }
+            if let result = try? await connection.call("machine.exec", parameters) {
+                new[space.id] = GitCounts(execResult: result)
+            } else {
+                // No answer, for example the machine is away: the space keeps what it showed.
+                new[space.id] = gitCounts[space.id]
+            }
+        }
+        if new != gitCounts { gitCounts = new }
     }
 
     private func readMachines(on connection: CoreConnection) async {
