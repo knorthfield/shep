@@ -22,6 +22,17 @@ struct TerminalRecord: Equatable, Identifiable {
     /// The agent that reports the status, for example `claude-code`.
     var statusApp: String? { json["status"]["app"].string }
     var foregroundName: String? { json["foreground"]["name"].string }
+    /// When the status last changed.
+    var statusChangeDate: Date? {
+        json["status_ms"].int.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000) }
+    }
+
+    /// The program in the terminal, for a person: the agent that reports a status (`claude-code` shows as "Claude Code"),
+    /// or the program in front.
+    var programName: String {
+        if let statusApp { return statusApp.split(separator: "-").map(\.capitalized).joined(separator: " ") }
+        return foregroundName ?? json["argv"].array?.first?.string.map { URL(fileURLWithPath: $0).lastPathComponent } ?? ""
+    }
 
     /// The machine part of the address, or nil for a terminal on this core.
     var machine: String? {

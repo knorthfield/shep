@@ -66,9 +66,30 @@ enum Attention {
         }
     }
 
+    /// The agents of the sidebar in groups by status, the most important status first. A sub-agent is in the group of its parent.
+    static func grouped(_ terminals: [TerminalRecord]) -> [(status: AgentStatus, agents: [(terminal: TerminalRecord, isSubAgent: Bool)])] {
+        var groups: [AgentStatus: [(terminal: TerminalRecord, isSubAgent: Bool)]] = [:]
+        var statusOfParent = AgentStatus.idle
+        for agent in ordered(terminals) {
+            if !agent.isSubAgent { statusOfParent = status(of: agent.terminal) ?? .idle }
+            groups[statusOfParent, default: []].append(agent)
+        }
+        return groups.sorted { $0.key > $1.key }.map { ($0.key, $0.value) }
+    }
+
+    /// The time since a date in a few characters, for example `5m`, `2h` or `3d`.
+    static func age(since date: Date, now: Date = .now) -> String {
+        let minutes = Int(now.timeIntervalSince(date) / 60)
+        if minutes < 1 { return "now" }
+        if minutes < 60 { return "\(minutes)m" }
+        if minutes < 60 * 24 { return "\(minutes / 60)h" }
+        return "\(minutes / (60 * 24))d"
+    }
+
     /// The agents in the order of the sidebar: pinned agents first, then by age. A sub-agent comes after its parent.
     static func ordered(_ terminals: [TerminalRecord]) -> [(terminal: TerminalRecord, isSubAgent: Bool)] {
-        let agents = terminals.filter { $0.statusWord != nil || $0.json["reported"].bool == true }
+        // A terminal that reported a status earlier, and has none now, is a shell where an agent stopped.
+        let agents = terminals.filter { $0.statusWord != nil }
         let addresses = Set(agents.map(\.address))
         let roots = agents.filter { $0.parent.map { !addresses.contains($0) } ?? true }
         let sortedRoots = roots.filter(isPinned) + roots.filter { !isPinned($0) }

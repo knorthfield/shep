@@ -6,6 +6,7 @@ struct TabBar: View {
     let space: LayoutDocument.Space
     @State private var tabToRename: LayoutDocument.Tab?
     @State private var newName = ""
+    @State private var hoveredTabID: String?
 
     var body: some View {
         HStack(spacing: 4) {
@@ -40,16 +41,31 @@ struct TabBar: View {
         return Button {
             model.select(tab, in: space)
         } label: {
-            Text(model.displayName(of: tab, in: space))
-                .lineLimit(1)
-                .frame(maxWidth: 180)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(isActive ? AnyShapeStyle(.selection) : AnyShapeStyle(.clear), in: .rect(cornerRadius: 6))
-                .contentShape(.rect)
+            HStack(spacing: 5) {
+                Image(systemName: isAgent(tab) ? "sparkle" : "terminal")
+                    .font(.caption)
+                    .foregroundStyle(isAgent(tab) ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+                Text(model.displayName(of: tab, in: space))
+                    .lineLimit(1)
+                    .frame(maxWidth: 180)
+                // The button keeps its place when it does not show, so that the tab keeps its width.
+                Button("Close Tab", systemImage: "xmark") { model.close(tab, in: space) }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.borderless)
+                    .font(.caption2.weight(.bold))
+                    .opacity(hoveredTabID == tab.id ? 1 : 0)
+            }
+            .padding(.leading, 9)
+            .padding(.trailing, 6)
+            .padding(.vertical, 4)
+            .background(isActive ? AnyShapeStyle(.selection) : AnyShapeStyle(.clear), in: .rect(cornerRadius: 6))
+            .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .fixedSize()
+        .onHover { isInside in
+            if isInside { hoveredTabID = tab.id } else if hoveredTabID == tab.id { hoveredTabID = nil }
+        }
         .contextMenu {
             Button("Rename…") {
                 newName = tab.name
@@ -57,6 +73,11 @@ struct TabBar: View {
             }
             Button("Close Tab", role: .destructive) { model.close(tab, in: space) }
         }
+    }
+
+    /// True if a program in the tab reports a status.
+    private func isAgent(_ tab: LayoutDocument.Tab) -> Bool {
+        tab.terminals.contains { model.terminals.terminals[$0]?.statusWord != nil }
     }
 
     private var isRenaming: Binding<Bool> {

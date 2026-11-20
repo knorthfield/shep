@@ -6,6 +6,29 @@ struct TerminalColor: Equatable, Hashable {
     var red: UInt8
     var green: UInt8
     var blue: UInt8
+
+    init(red: UInt8, green: UInt8, blue: UInt8) {
+        (self.red, self.green, self.blue) = (red, green, blue)
+    }
+
+    /// The value is `0xRRGGBB`.
+    init(hex: UInt32) {
+        self.init(red: UInt8(hex >> 16 & 0xFF), green: UInt8(hex >> 8 & 0xFF), blue: UInt8(hex & 0xFF))
+    }
+}
+
+/// The colours of a terminal: the colours of text without a colour of its own, and the 16 colours that programs name by number.
+struct TerminalColors {
+    var foreground: TerminalColor
+    var background: TerminalColor
+    var ansi: [TerminalColor]
+
+    /// Each value is `0xRRGGBB`.
+    init(foreground: UInt32, background: UInt32, ansi: [UInt32]) {
+        self.foreground = TerminalColor(hex: foreground)
+        self.background = TerminalColor(hex: background)
+        self.ansi = ansi.map(TerminalColor.init(hex:))
+    }
 }
 
 /// One cell of the terminal screen, ready to draw.
@@ -52,6 +75,8 @@ final class GhosttyTerminal {
     private let rowCells: GhosttyRenderStateRowCells
     private let keyEncoder: GhosttyKeyEncoder
     private let keyEvent: GhosttyKeyEvent
+    private let mouseEncoder: GhosttyMouseEncoder
+    private let mouseEvent: GhosttyMouseEvent
     /// The answers of the terminal to queries of the program, for example a cursor position report.
     private var replies = Data()
 
@@ -62,14 +87,20 @@ final class GhosttyTerminal {
         var rowCells: GhosttyRenderStateRowCells?
         var keyEncoder: GhosttyKeyEncoder?
         var keyEvent: GhosttyKeyEvent?
+        var mouseEncoder: GhosttyMouseEncoder?
+        var mouseEvent: GhosttyMouseEvent?
         guard ghostty_terminal_new(nil, &terminal, columns, rows) == GHOSTTY_SUCCESS,
               ghostty_render_state_new(nil, &renderState) == GHOSTTY_SUCCESS,
               ghostty_render_state_row_iterator_new(nil, &rowIterator) == GHOSTTY_SUCCESS,
               ghostty_render_state_row_cells_new(nil, &rowCells) == GHOSTTY_SUCCESS,
               ghostty_key_encoder_new(nil, &keyEncoder) == GHOSTTY_SUCCESS,
               ghostty_key_event_new(nil, &keyEvent) == GHOSTTY_SUCCESS,
-              let terminal, let renderState, let rowIterator, let rowCells, let keyEncoder, let keyEvent
+              ghostty_mouse_encoder_new(nil, &mouseEncoder) == GHOSTTY_SUCCESS,
+              ghostty_mouse_event_new(nil, &mouseEvent) == GHOSTTY_SUCCESS,
+              let terminal, let renderState, let rowIterator, let rowCells, let keyEncoder, let keyEvent, let mouseEncoder, let mouseEvent
         else {
+            ghostty_mouse_event_free(mouseEvent)
+            ghostty_mouse_encoder_free(mouseEncoder)
             ghostty_key_event_free(keyEvent)
             ghostty_key_encoder_free(keyEncoder)
             ghostty_render_state_row_cells_free(rowCells)
@@ -84,6 +115,8 @@ final class GhosttyTerminal {
         self.rowCells = rowCells
         self.keyEncoder = keyEncoder
         self.keyEvent = keyEvent
+        self.mouseEncoder = mouseEncoder
+        self.mouseEvent = mouseEvent
         self.columns = Int(columns)
         rowCount = Int(rows)
 
@@ -95,10 +128,19 @@ final class GhosttyTerminal {
             MainActor.assumeIsolated { owner.replies.append(bytes, count: count) }
         }
         ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_WRITE_PTY, unsafeBitCast(collectReply, to: UnsafeRawPointer.self))
-        setColors(foreground: foreground, background: background)
+        // Without a limit of lines, the terminal keeps about one page of history.
+        var historyLines = Self.historyLines
+        ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES, &historyLines)
+        var historyBytes = Self.historyLines * 1024
+        ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES, &historyBytes)
     }
 
+    /// The number of rows of history that a terminal keeps. The first paint of the core has fewer rows than this.
+    static let historyLines = 5000
+
     isolated deinit {
+        ghostty_mouse_event_free(mouseEvent)
+        ghostty_mouse_encoder_free(mouseEncoder)
         ghostty_key_event_free(keyEvent)
         ghostty_key_encoder_free(keyEncoder)
         ghostty_render_state_row_cells_free(rowCells)
@@ -107,12 +149,18 @@ final class GhosttyTerminal {
         ghostty_terminal_free(terminal)
     }
 
-    /// Sets the colours that a cell without a colour of its own gets.
-    func setColors(foreground: TerminalColor, background: TerminalColor) {
-        var foregroundValue = GhosttyColorRgb(r: foreground.red, g: foreground.green, b: foreground.blue)
-        var backgroundValue = GhosttyColorRgb(r: background.red, g: background.green, b: background.blue)
+    func setColors(_ colors: TerminalColors) {
+        var foregroundValue = GhosttyColorRgb(r: colors.foreground.red, g: colors.foreground.green, b: colors.foreground.blue)
+        var backgroundValue = GhosttyColorRgb(r: colors.background.red, g: colors.background.green, b: colors.background.blue)
         ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND, &foregroundValue)
         ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND, &backgroundValue)
+        // The palette has 256 colours. Only the first 16 change with the appearance.
+        var palette = [GhosttyColorRgb](repeating: GhosttyColorRgb(), count: 256)
+        guard ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_COLOR_PALETTE_DEFAULT, &palette) == GHOSTTY_SUCCESS else { return }
+        for (index, color) in colors.ansi.prefix(16).enumerated() {
+            palette[index] = GhosttyColorRgb(r: color.red, g: color.green, b: color.blue)
+        }
+        ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_COLOR_PALETTE, &palette)
     }
 
     /// Gives program output (bytes from the attach stream) to the terminal.
@@ -296,6 +344,36 @@ final class GhosttyTerminal {
         var screen = GHOSTTY_TERMINAL_SCREEN_PRIMARY
         ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_ACTIVE_SCREEN, &screen)
         return screen == GHOSTTY_TERMINAL_SCREEN_ALTERNATE
+    }
+
+    /// True when the program asked for mouse events. The wheel then goes to the program.
+    var isMouseTracking: Bool {
+        var isTracking = false
+        ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_MOUSE_TRACKING, &isTracking)
+        return isTracking
+    }
+
+    /// The bytes that one step of the mouse wheel sends to a program that asked for mouse events.
+    /// - Parameters:
+    ///   - x: The place of the pointer from the left edge of the cells, in the same unit as `cellWidth`.
+    ///   - y: The place of the pointer from the top edge of the cells.
+    func encodeMouseWheel(up: Bool, modifiers: KeyModifiers, x: CGFloat, y: CGFloat, cellWidth: CGFloat, cellHeight: CGFloat) -> Data {
+        ghostty_mouse_encoder_set_from_terminal(mouseEncoder, terminal)
+        var size = GhosttyMouseEncoderSize()
+        ghostty_sized_init(&size, MemoryLayout<GhosttyMouseEncoderSize>.size)
+        size.cell_width = UInt32(max(cellWidth, 1))
+        size.cell_height = UInt32(max(cellHeight, 1))
+        size.screen_width = size.cell_width * UInt32(columns)
+        size.screen_height = size.cell_height * UInt32(rowCount)
+        ghostty_mouse_encoder_set(mouseEncoder, GHOSTTY_MOUSE_ENCODER_OPT_SIZE, &size)
+        ghostty_mouse_event_set_action(mouseEvent, GHOSTTY_MOUSE_ACTION_PRESS)
+        ghostty_mouse_event_set_button(mouseEvent, up ? GHOSTTY_MOUSE_BUTTON_FOUR : GHOSTTY_MOUSE_BUTTON_FIVE)
+        ghostty_mouse_event_set_mods(mouseEvent, modifiers.rawValue)
+        ghostty_mouse_event_set_position(mouseEvent, GhosttyMousePosition(x: Float(max(x, 0)), y: Float(max(y, 0))))
+        var output = [UInt8](repeating: 0, count: 128)
+        var written = 0
+        guard ghostty_mouse_encoder_encode(mouseEncoder, mouseEvent, &output, output.count, &written) == GHOSTTY_SUCCESS else { return Data() }
+        return Data(output.prefix(written))
     }
 
     /// The bytes that send pasted text to the program: without control bytes, and in paste marks if the program asked for them.

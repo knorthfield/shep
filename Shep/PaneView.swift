@@ -9,10 +9,22 @@ struct PaneView: View {
 
     var body: some View {
         switch pane {
-        case .terminal(_, let address):
+        case .terminal(let paneID, let address):
             if let session = model.session(for: address) {
-                TerminalPane(session: session)
-                    .id(address)
+                VStack(spacing: 0) {
+                    header(of: model.terminals.terminals[address])
+                    Divider()
+                    TerminalPane(session: session)
+                        .id(address)
+                }
+                .overlay {
+                    // With one pane, the focus has no other place to be.
+                    if paneID == model.focusedPaneID, (model.activeTab?.terminals.count ?? 0) > 1, model.zoomedPane == nil {
+                        Rectangle()
+                            .strokeBorder(Color.accentColor, lineWidth: 1)
+                            .allowsHitTesting(false)
+                    }
+                }
             }
         case .unsupported:
             ContentUnavailableView(
@@ -36,5 +48,24 @@ struct PaneView: View {
             }
             .background(.separator)
         }
+    }
+
+    /// The program in the terminal and its folder.
+    private func header(of terminal: TerminalRecord?) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: terminal?.statusWord != nil ? "sparkle" : "terminal")
+                .foregroundStyle(terminal?.statusWord != nil ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+            Text(terminal?.programName ?? "")
+                .fontWeight(.medium)
+            Text(terminal?.workingFolder ?? "")
+                .foregroundStyle(.secondary)
+                .truncationMode(.head)
+            Spacer()
+        }
+        .font(.caption)
+        .lineLimit(1)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(.background)
     }
 }

@@ -20,6 +20,22 @@ struct ContentView: View {
         }
     }
 
+    /// The machine of the space, the number of agents, and the key of the command palette.
+    private func statusBar(of space: LayoutDocument.Space) -> some View {
+        HStack(spacing: 14) {
+            Label(space.machine ?? "This Computer", systemImage: space.machine == nil ? "desktopcomputer" : "server.rack")
+            Label(model.agents.count == 1 ? "1 agent" : "\(model.agents.count) agents", systemImage: "sparkle")
+            Spacer()
+            Button("⇧⌘P  Commands") { model.isPaletteVisible = true }
+                .buttonStyle(.plain)
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
     private var sidebarVisibility: Binding<NavigationSplitViewVisibility> {
         Binding {
             model.isSidebarVisible ? .all : .detailOnly
@@ -49,6 +65,8 @@ struct ContentView: View {
                     TabBar(model: model, space: space)
                     Divider()
                     PaneView(model: model, pane: model.zoomedPane ?? tab.root)
+                    Divider()
+                    statusBar(of: space)
                 }
             } else {
                 ContentUnavailableView {

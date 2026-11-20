@@ -49,6 +49,17 @@ struct TerminalScreenTests {
         #expect(inverse.background == terminal.foreground)
     }
 
+    @Test func aColourThatAProgramNamesByNumberComesFromTheColoursOfTheTerminal() {
+        terminal.setColors(TerminalColors(foreground: 0x010203, background: 0x040506, ansi: [0x000000, 0xAA0000] + Array(repeating: 0x111111, count: 14)))
+        // Colour 1 is red. Colour 196 is not one of the 16 colours.
+        terminal.write(Data("\u{1B}[31mR\u{1B}[38;5;196mX\u{1B}[0mN".utf8))
+        _ = terminal.refresh()
+        #expect(terminal.rows[0][0].foreground == TerminalColor(hex: 0xAA0000))
+        #expect(terminal.rows[0][1].foreground == TerminalColor(hex: 0xFF0000))
+        #expect(terminal.rows[0][2].foreground == TerminalColor(hex: 0x010203))
+        #expect(terminal.background == TerminalColor(hex: 0x040506))
+    }
+
     @Test func aWideCharacterIsOneWideCell() {
         terminal.write(Data("日".utf8))
         _ = terminal.refresh()
@@ -160,6 +171,27 @@ struct TerminalSelectionTests {
         #expect(terminal.encodePaste("a\nb") == Data("a\rb".utf8))
         terminal.write(Data("\u{1B}[?2004h".utf8))
         #expect(terminal.encodePaste("a\nb") == Data("\u{1B}[200~a\nb\u{1B}[201~".utf8))
+    }
+
+    @Test func theWheelIsAMouseReportOnlyWhenTheProgramAskedForTheMouse() {
+        #expect(!terminal.isMouseTracking)
+        terminal.write(Data("\u{1B}[?1000h\u{1B}[?1006h".utf8))
+        #expect(terminal.isMouseTracking)
+        // The pointer is in the third column of the second row. Cells are 10 by 20.
+        let up = terminal.encodeMouseWheel(up: true, modifiers: [], x: 25, y: 30, cellWidth: 10, cellHeight: 20)
+        #expect(String(decoding: up, as: UTF8.self) == "\u{1B}[<64;3;2M")
+        let down = terminal.encodeMouseWheel(up: false, modifiers: [], x: 25, y: 30, cellWidth: 10, cellHeight: 20)
+        #expect(String(decoding: down, as: UTF8.self) == "\u{1B}[<65;3;2M")
+        terminal.write(Data("\u{1B}[?1000l".utf8))
+        #expect(!terminal.isMouseTracking)
+    }
+
+    @Test func theHistoryKeepsManyRows() {
+        terminal.write(Data((1...1500).map { "line \($0)\r\n" }.joined().utf8))
+        terminal.scroll(rows: -1400)
+        _ = terminal.refresh()
+        // The screen has 4 rows: the top row was line 1498.
+        #expect(terminal.rows[0].prefix(8).map(\.text).joined() == "line 98")
     }
 
     @Test func theAlternateScreenIsKnown() {

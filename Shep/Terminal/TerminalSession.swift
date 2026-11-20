@@ -24,7 +24,11 @@ final class TerminalSession {
         self.address = address
         self.connection = connection
         self.terminal = terminal
-        view = TerminalView(terminal: terminal, fontSize: UserDefaults.standard.double(forKey: SettingsKey.fontSize))
+        view = TerminalView(
+            terminal: terminal,
+            fontName: UserDefaults.standard.string(forKey: SettingsKey.fontName) ?? "",
+            fontSize: UserDefaults.standard.double(forKey: SettingsKey.fontSize)
+        )
         view.onInput = { [weak self] bytes in self?.send(.data, bytes) }
         view.onFocusChange = { [weak self] hasFocus in
             self?.send(.focus, Data([hasFocus ? 1 : 0]))

@@ -27,6 +27,10 @@ final class AppModel {
     private(set) var pausedMachines: [Machine] = AppModel.storedPausedMachines() {
         didSet { UserDefaults.standard.set(try? JSONEncoder().encode(pausedMachines), forKey: SettingsKey.pausedMachines) }
     }
+    /// The name of the paused machine that Shep connects to again now.
+    private(set) var resumingMachine: String?
+    /// The pane that the Settings window shows.
+    var settingsPane = SettingsPane.general
     var isSidebarVisible = true
     var isPaletteVisible = false
     @ObservationIgnored private let alerts = Alerts()
@@ -123,6 +127,11 @@ final class AppModel {
         Attention.ordered(terminals.ordered)
     }
 
+    /// The space that has a terminal.
+    func space(of terminal: TerminalRecord) -> LayoutDocument.Space? {
+        spaces.first { $0.tabs.contains { $0.terminals.contains(terminal.address) } }
+    }
+
     /// The most important status of the agents of a space.
     func status(of space: LayoutDocument.Space) -> AgentStatus? {
         Attention.rollup(space.tabs.flatMap(\.terminals).map { terminals.terminals[$0].flatMap(Attention.status(of:)) })
@@ -197,6 +206,8 @@ final class AppModel {
 
     /// Connects to a paused machine again. Returns the error text, or nil if the machine was added.
     func resumeMachine(_ machine: Machine) async -> String? {
+        resumingMachine = machine.name
+        defer { resumingMachine = nil }
         let error = await addMachine(machine.addParameters)
         if error == nil { pausedMachines.removeAll { $0.name == machine.name } }
         return error
@@ -209,12 +220,12 @@ final class AppModel {
 
     // MARK: Commands
 
-    /// Makes a space with one terminal in a folder of this Mac. Nil: the home folder.
-    func newSpace(folder: String? = nil) {
+    /// Makes a space with one terminal in a folder of this Mac or of a machine. No folder: the home folder.
+    func newSpace(folder: String? = nil, machine: String? = nil) {
         Task {
-            let (spaceID, tabID, paneID) = (LayoutDocument.newID("sp"), LayoutDocument.newID("tb"), LayoutDocument.newID("pd"))
-            guard let address = await runTerminal(machine: nil, folder: folder, spaceID: spaceID, tabID: tabID) else { return }
-            layout.change(machine: nil) {
+            let (spaceID, tabID, paneID) = (qualified(LayoutDocument.newID("sp"), machine), qualified(LayoutDocument.newID("tb"), machine), qualified(LayoutDocument.newID("pd"), machine))
+            guard let address = await runTerminal(machine: machine, folder: folder, spaceID: spaceID, tabID: tabID) else { return }
+            layout.change(machine: machine) {
                 $0.addSpace(id: spaceID, name: "", folder: folder ?? "", tabID: tabID, paneID: paneID, terminal: address)
             }
             activeSpaceID = spaceID

@@ -18,6 +18,28 @@ struct AttentionTests {
         #expect(Attention.status(of: terminal(status: nil)) == nil)
     }
 
+    @Test func aShellWhereAnAgentStoppedIsNotInTheList() {
+        let stopped = TerminalRecord(json: ["address": "t9", "reported": true, "status": .null])
+        #expect(Attention.ordered([stopped, terminal("t1")]).map(\.terminal.address) == ["t1"])
+    }
+
+    @Test func agentsAreInGroupsByStatusAndASubAgentIsWithItsParent() {
+        let groups = Attention.grouped([
+            terminal("t1", status: "idle"), terminal("t2", status: "blocked"), terminal("t3", status: "working"),
+            terminal("t4", status: "idle", parent: "t3"),
+        ])
+        #expect(groups.map(\.status) == [.blocked, .working, .idle])
+        #expect(groups.map { $0.agents.map(\.terminal.address) } == [["t2"], ["t3", "t4"], ["t1"]])
+    }
+
+    @Test func theAgeOfAStatusIsShort() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        #expect(Attention.age(since: now.addingTimeInterval(-20), now: now) == "now")
+        #expect(Attention.age(since: now.addingTimeInterval(-5 * 60), now: now) == "5m")
+        #expect(Attention.age(since: now.addingTimeInterval(-2.5 * 3600), now: now) == "2h")
+        #expect(Attention.age(since: now.addingTimeInterval(-3 * 86400), now: now) == "3d")
+    }
+
     @Test func blockedAndErrorNeedAPersonAndWorkingIsWorking() {
         #expect(Attention.status(of: terminal(status: "blocked")) == .blocked)
         #expect(Attention.status(of: terminal(status: "error")) == .blocked)

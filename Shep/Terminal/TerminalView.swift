@@ -4,12 +4,24 @@ import CoreText
 /// Draws one terminal with CoreText and sends key presses to it.
 @MainActor
 final class TerminalView: NSView {
-    /// The space between the edge of the view and the cells.
-    static let padding: CGFloat = 6
+    /// The space between the edge of the view and the cells: left and right, then top and bottom. As in Herdr.
+    static let padding = CGSize(width: 10, height: 6)
+    /// Fonts for symbols that the terminal font does not have, tried in this order. They have one colour, as the symbols of
+    /// a terminal have. Without them, macOS draws some symbols, for example ⏺, from the emoji font.
+    private static let symbolFontNames = ["Menlo-Regular", "AppleSymbols", "STIXTwoMath-Regular"]
     /// The view is flipped: this text matrix turns the text the right way up.
     private static let uprightText = CGAffineTransform(scaleX: 1, y: -1)
-    private static let darkColors = (foreground: TerminalColor(red: 0xD8, green: 0xD8, blue: 0xD8), background: TerminalColor(red: 0x1C, green: 0x1C, blue: 0x1E))
-    private static let lightColors = (foreground: TerminalColor(red: 0x1D, green: 0x1D, blue: 0x1F), background: TerminalColor(red: 0xFF, green: 0xFF, blue: 0xFF))
+    private static let darkColors = TerminalColors(
+        foreground: 0xD2D4D9, background: 0x17191D,
+        ansi: [0x45484F, 0xDC8C95, 0xA6BD91, 0xD8BE87, 0x96B2D7, 0xB5A2CE, 0x8CBDC3, 0xD2D4D9,
+               0x818793, 0xF0A5AD, 0xBAD5A2, 0xEAD2A1, 0xB0CBEF, 0xCBB7E6, 0xA4D5DB, 0xF0F0F2]
+    )
+    /// Each colour is legible on white. Bright white is dark: programs use it for strong text.
+    private static let lightColors = TerminalColors(
+        foreground: 0x25272C, background: 0xFFFFFF,
+        ansi: [0x25272C, 0xC62A2A, 0x1A7F37, 0x8F5D00, 0x1F62D0, 0x7A45C8, 0x0F6F74, 0x5F6068,
+               0x7B7E87, 0xD1242F, 0x1F883D, 0x9A6700, 0x0969DA, 0x8250DF, 0x1B7C83, 0x111214]
+    )
 
     /// Bytes that the user typed or pasted, to send to the program.
     var onInput: ((Data) -> Void)?
@@ -25,6 +37,7 @@ final class TerminalView: NSView {
     private let boldFont: CTFont
     private let italicFont: CTFont
     private let boldItalicFont: CTFont
+    private let symbolFonts: [CTFont]
     let cellSize: CGSize
     private let baseline: CGFloat
     private var glyphs: [GlyphKey: (font: CTFont, glyph: CGGlyph)?] = [:]
@@ -38,21 +51,30 @@ final class TerminalView: NSView {
     /// The text that the input system made from the key press that is in work. Nil: no key press is in work.
     private var textOfKeyPress: String?
 
-    init(terminal: GhosttyTerminal, fontSize: CGFloat) {
+    /// - Parameter fontName: The name of a font family. Empty, or a font that is not installed: the monospaced font of macOS.
+    init(terminal: GhosttyTerminal, fontName: String = "", fontSize: CGFloat) {
         self.terminal = terminal
         // A font size of 0 comes from tests, which have no settings.
         let fontSize = fontSize > 0 ? fontSize : SettingsKey.standardFontSize
-        let regular = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular) as CTFont
-        let bold = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .bold) as CTFont
+        let fonts = NSFontManager.shared
+        let regularFont = fonts.font(withFamily: fontName, traits: [], weight: 5, size: fontSize)
+            ?? .monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        let regular = regularFont as CTFont
+        let boldFont = fonts.font(withFamily: fontName, traits: .boldFontMask, weight: 9, size: fontSize)
+            ?? .monospacedSystemFont(ofSize: fontSize, weight: .bold)
+        let bold = boldFont as CTFont
         font = regular
-        boldFont = bold
+        self.boldFont = bold
         italicFont = CTFontCreateCopyWithSymbolicTraits(regular, 0, nil, .traitItalic, .traitItalic) ?? regular
         boldItalicFont = CTFontCreateCopyWithSymbolicTraits(bold, 0, nil, .traitItalic, .traitItalic) ?? bold
+        symbolFonts = Self.symbolFontNames.map { CTFontCreateWithName($0 as CFString, fontSize, nil) }
         var glyph = CTFontGetGlyphWithName(regular, "M" as CFString)
         let advance = CTFontGetAdvancesForGlyphs(regular, .horizontal, &glyph, nil, 1)
-        let ascent = CTFontGetAscent(regular).rounded(.up)
-        let descent = CTFontGetDescent(regular).rounded(.up)
-        cellSize = CGSize(width: advance.rounded(.up), height: ascent + descent + CTFontGetLeading(regular).rounded(.up))
+        // A cell is a whole number of display pixels. A cell that is rounded up to a whole point puts the letters too far apart.
+        let scale = NSScreen.main?.backingScaleFactor ?? 2
+        func toPixels(_ length: CGFloat) -> CGFloat { max((length * scale).rounded(), 1) / scale }
+        let ascent = toPixels(CTFontGetAscent(regular))
+        cellSize = CGSize(width: toPixels(advance), height: ascent + toPixels(CTFontGetDescent(regular) + CTFontGetLeading(regular)))
         baseline = ascent
         super.init(frame: .zero)
         // Without this, AppKit can give `draw` an area larger than the view, and the background hides the views near it.
@@ -90,8 +112,8 @@ final class TerminalView: NSView {
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
-        let columns = Int((newSize.width - 2 * Self.padding) / cellSize.width)
-        let rows = Int((newSize.height - 2 * Self.padding) / cellSize.height)
+        let columns = Int((newSize.width - 2 * Self.padding.width) / cellSize.width)
+        let rows = Int((newSize.height - 2 * Self.padding.height) / cellSize.height)
         guard columns > 0, rows > 0, columns != terminal.columns || rows != terminal.rowCount else { return }
         terminal.resize(columns: columns, rows: rows, cellWidth: cellPixelSize.width, cellHeight: cellPixelSize.height)
         _ = terminal.refresh()
@@ -127,7 +149,7 @@ final class TerminalView: NSView {
     private func applyAppearanceColors() {
         let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         let colors = isDark ? Self.darkColors : Self.lightColors
-        terminal.setColors(foreground: colors.foreground, background: colors.background)
+        terminal.setColors(colors)
     }
 
     // MARK: Keyboard
@@ -225,11 +247,23 @@ final class TerminalView: NSView {
         let rows = Int(scrollRemainder / cellSize.height)
         guard rows != 0 else { return }
         scrollRemainder -= CGFloat(rows) * cellSize.height
-        if terminal.isAlternateScreen {
-            // A full-screen program has no history: it gets arrow keys, as other terminals do.
+        let steps = (0..<abs(rows))
+        if terminal.isMouseTracking {
+            // The program asked for the mouse: it gets the wheel, as in Ghostty and in Herdr.
+            let point = convert(event.locationInWindow, from: nil)
+            let scale = window?.backingScaleFactor ?? 2
+            let bytes = terminal.encodeMouseWheel(
+                up: rows > 0,
+                modifiers: KeyMapping.modifiers(event.modifierFlags),
+                x: (point.x - Self.padding.width) * scale, y: (point.y - Self.padding.height) * scale,
+                cellWidth: cellSize.width * scale, cellHeight: cellSize.height * scale
+            )
+            onInput?(Data(steps.flatMap { _ in bytes }))
+        } else if terminal.isAlternateScreen {
+            // A full-screen program that does not use the mouse has no history: it gets arrow keys, as in other terminals.
             let key = KeyMapping.key(forKeyCode: rows > 0 ? 126 : 125)
             let bytes = terminal.encodeKey(key, modifiers: [], text: "", unshiftedCodepoint: 0, isRepeat: false)
-            onInput?(Data((0..<abs(rows)).flatMap { _ in bytes }))
+            onInput?(Data(steps.flatMap { _ in bytes }))
         } else {
             terminal.scroll(rows: -rows)
             refresh()
@@ -238,7 +272,7 @@ final class TerminalView: NSView {
 
     private func cell(at event: NSEvent) -> (column: Int, row: Int) {
         let point = convert(event.locationInWindow, from: nil)
-        return (Int((point.x - Self.padding) / cellSize.width), Int((point.y - Self.padding) / cellSize.height))
+        return (Int((point.x - Self.padding.width) / cellSize.width), Int((point.y - Self.padding.height) / cellSize.height))
     }
 
     // MARK: Drawing
@@ -255,7 +289,7 @@ final class TerminalView: NSView {
     }
 
     private func draw(_ cells: [TerminalCell], row: Int, in context: CGContext) {
-        let top = Self.padding + CGFloat(row) * cellSize.height
+        let top = Self.padding.height + CGFloat(row) * cellSize.height
         for (column, cell) in cells.enumerated() {
             guard let background = cell.background else { continue }
             context.setFillColor(background.cgColor)
@@ -267,7 +301,7 @@ final class TerminalView: NSView {
             context.fill(CGRect(x: first.minX, y: first.minY, width: CGFloat(selection.count) * cellSize.width, height: first.height))
         }
         for (column, cell) in cells.enumerated() where !cell.text.isEmpty && cell.text != " " {
-            let left = Self.padding + CGFloat(column) * cellSize.width
+            let left = Self.padding.width + CGFloat(column) * cellSize.width
             let color = cell.foreground.cgColor.copy(alpha: cell.isFaint ? 0.5 : 1) ?? cell.foreground.cgColor
             context.setFillColor(color)
             draw(cell.text, isBold: cell.isBold, isItalic: cell.isItalic, at: CGPoint(x: left, y: top + baseline), in: context)
@@ -346,6 +380,12 @@ final class TerminalView: NSView {
         let characters = Array(text.utf16)
         var glyphs = [CGGlyph](repeating: 0, count: characters.count)
         if CTFontGetGlyphsForCharacters(base, characters, &glyphs, characters.count) { return (base, glyphs[0]) }
+        // A character that is an emoji only with a variation selector is a symbol here.
+        if text.unicodeScalars.first?.properties.isEmojiPresentation == false {
+            for symbolFont in symbolFonts where CTFontGetGlyphsForCharacters(symbolFont, characters, &glyphs, characters.count) {
+                return (symbolFont, glyphs[0])
+            }
+        }
         let fallback = CTFontCreateForString(base, text as CFString, CFRange(location: 0, length: characters.count))
         if CTFontGetGlyphsForCharacters(fallback, characters, &glyphs, characters.count) { return (fallback, glyphs[0]) }
         return nil
@@ -361,13 +401,13 @@ final class TerminalView: NSView {
     }
 
     private func rect(ofRow row: Int) -> CGRect {
-        CGRect(x: 0, y: Self.padding + CGFloat(row) * cellSize.height, width: bounds.width, height: cellSize.height)
+        CGRect(x: 0, y: Self.padding.height + CGFloat(row) * cellSize.height, width: bounds.width, height: cellSize.height)
     }
 
     private func rect(column: Int, row: Int, isWide: Bool) -> CGRect {
         CGRect(
-            x: Self.padding + CGFloat(column) * cellSize.width,
-            y: Self.padding + CGFloat(row) * cellSize.height,
+            x: Self.padding.width + CGFloat(column) * cellSize.width,
+            y: Self.padding.height + CGFloat(row) * cellSize.height,
             width: cellSize.width * (isWide ? 2 : 1),
             height: cellSize.height
         )
