@@ -25,6 +25,8 @@ final class TerminalView: NSView {
 
     /// Bytes that the user typed or pasted, to send to the program.
     var onInput: ((Data) -> Void)?
+    /// The user dropped these files on the view.
+    var onFileDrop: (([URL]) -> Void)?
     /// The view has a new number of columns and rows.
     var onGridChange: ((_ columns: Int, _ rows: Int) -> Void)?
     /// The view got or lost the keyboard.
@@ -79,6 +81,7 @@ final class TerminalView: NSView {
         super.init(frame: .zero)
         // Without this, AppKit can give `draw` an area larger than the view, and the background hides the views near it.
         clipsToBounds = true
+        registerForDraggedTypes([.fileURL])
         applyAppearanceColors()
     }
 
@@ -205,8 +208,28 @@ final class TerminalView: NSView {
 
     @objc func paste(_ sender: Any?) {
         guard let text = NSPasteboard.general.string(forType: .string), !text.isEmpty else { return }
+        paste(text: text)
+    }
+
+    /// Sends text to the program as a paste.
+    func paste(text: String) {
         let bytes = terminal.encodePaste(text)
-        if !bytes.isEmpty { onInput?(bytes) }
+        guard !bytes.isEmpty else { return }
+        terminal.scrollToBottom()
+        scheduleRefresh()
+        onInput?(bytes)
+    }
+
+    // MARK: File drop
+
+    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation { .copy }
+
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        let objects = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])
+        guard let urls = objects as? [URL], !urls.isEmpty else { return false }
+        window?.makeFirstResponder(self)
+        onFileDrop?(urls)
+        return true
     }
 
     override func selectAll(_ sender: Any?) {

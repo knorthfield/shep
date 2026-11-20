@@ -30,6 +30,7 @@ final class TerminalSession {
             fontSize: UserDefaults.standard.double(forKey: SettingsKey.fontSize)
         )
         view.onInput = { [weak self] bytes in self?.send(.data, bytes) }
+        view.onFileDrop = { [weak self] urls in self?.drop(urls) }
         view.onFocusChange = { [weak self] hasFocus in
             self?.send(.focus, Data([hasFocus ? 1 : 0]))
             if hasFocus { self?.onBecameFocused?() }
@@ -131,6 +132,75 @@ final class TerminalSession {
                 if let word = reason["reason"].string { show(notice: "The program stopped (\(word)).") }
             case .resize:
                 break
+            }
+        }
+    }
+
+    // MARK: File drop
+
+    /// Pastes the paths of dropped files. A terminal on a machine gets a copy of each file, and the path of the copy there.
+    private func drop(_ urls: [URL]) {
+        guard address.contains("/") else {
+            return paste(paths: urls.map { DroppedFiles.isTemporaryScreenshot($0) ? (keptCopy(of: $0) ?? $0).path : $0.path })
+        }
+        Task {
+            var paths: [String] = []
+            for url in urls {
+                do {
+                    paths.append(try await sendToMachine(url))
+                } catch {
+                    let reason = (error as? CoreError)?.message ?? error.localizedDescription
+                    show(notice: "Shep cannot send \(url.lastPathComponent): \(reason)")
+                }
+            }
+            if !paths.isEmpty { paste(paths: paths) }
+        }
+    }
+
+    private func paste(paths: [String]) {
+        guard let text = DroppedFiles.pasteText(forPaths: paths) else {
+            return show(notice: "Shep cannot paste a path that has a control character.")
+        }
+        view.paste(text: text)
+    }
+
+    /// Copies the file of a screenshot thumbnail to a folder where it stays. macOS deletes the initial file after a few seconds.
+    private func keptCopy(of url: URL) -> URL? {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "shep-drops")
+        let copy = folder.appending(path: "\(Int(Date().timeIntervalSince1970 * 1000))-\(url.lastPathComponent)")
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try FileManager.default.copyItem(at: url, to: copy)
+            return copy
+        } catch {
+            Self.logger.error("Copy of \(url.path) failed: \(error)")
+            return nil
+        }
+    }
+
+    /// Sends a file to the machine of this terminal and returns its path there.
+    private func sendToMachine(_ url: URL) async throws -> String {
+        let values = try url.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
+        guard values.isDirectory != true else { throw DropError.folder }
+        guard (values.fileSize ?? 0) <= DroppedFiles.largestSentFile else { throw DropError.tooLarge }
+        let data = try Data(contentsOf: url)
+        let result = try await connection.call("terminal.put", [
+            "terminal": .string(address),
+            "name": .string(url.lastPathComponent),
+            "data": .string(data.base64EncodedString()),
+        ], timeout: .seconds(60))
+        guard let path = result["path"].string else { throw DropError.noPath }
+        return path
+    }
+
+    private enum DropError: LocalizedError {
+        case folder, tooLarge, noPath
+
+        var errorDescription: String? {
+            switch self {
+            case .folder: "a folder cannot go to another machine."
+            case .tooLarge: "the file is larger than 8 MB."
+            case .noPath: "the machine gave no path."
             }
         }
     }

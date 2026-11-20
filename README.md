@@ -43,6 +43,8 @@ Shep has no release yet. See [Build](#build).
 - **Command Palette…** (Shift-Command-P) shows all commands and their keys.
 - Right-click a space or a tab to rename it or close it. Right-click an agent to pin it or to mark
   it as unread.
+- Drag a screenshot or a file into a terminal to paste its path. A terminal on a machine gets a copy of
+  the file (8 MB maximum).
 - Pause or resume a machine with the button beside its name in the sidebar.
 - **Settings…** has the font and the font size of the terminals, the alerts, the machines, and the path
   of the `hc` command.
