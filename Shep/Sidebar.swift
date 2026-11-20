@@ -293,7 +293,7 @@ private struct MachineStateDot: View {
 
     var body: some View {
         Image(systemName: "circle.fill")
-            .font(.system(size: 7))
+            .imageScale(.small)
             .foregroundStyle(color)
             .help(label)
             .accessibilityLabel(label)
