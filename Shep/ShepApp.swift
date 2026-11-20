@@ -32,6 +32,7 @@ struct ShepApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let model = AppModel()
     private var window: MainWindow?
+    private let updateRelauncher = UpdateRelauncher()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         SettingsKey.registerDefaults()
@@ -41,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.show()
         model.start()
         self.window = window
+        updateRelauncher.start()
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
