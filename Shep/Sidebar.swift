@@ -165,7 +165,7 @@ struct Sidebar: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Image(systemName: "sparkle")
                     .foregroundStyle(.orange)
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: 3) {
                     let names = agentNames(terminal)
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         agentLine(names.first ?? "")
@@ -185,14 +185,17 @@ struct Sidebar: View {
                         StatusDot(status: Attention.status(of: terminal), showsIdle: true)
                     }
                     ForEach(names.dropFirst(), id: \.self) { agentLine($0) }
-                    ForEach([terminal.programName, terminal.machine].compactMap { $0 }, id: \.self) { detail in
-                        agentLine(detail)
+                    // The program and the machine are on one line.
+                    let details = [terminal.programName, terminal.machine].compactMap { $0 }
+                    if !details.isEmpty {
+                        agentLine(details.joined(separator: " · "))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
             }
             .padding(.leading, isSubAgent ? 14 : 0)
+            .padding(.vertical, 3)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
