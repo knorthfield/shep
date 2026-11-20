@@ -11,11 +11,10 @@ struct Sidebar: View {
     var body: some View {
         List(selection: selection) {
             Section {
-                spaceRows(onMachine: nil)
-            } header: {
                 MachineHeader(name: "This Computer", symbol: "desktopcomputer") {
                     headerButton("New Space", symbol: "plus") { model.newSpace() }
                 }
+                spaceRows(onMachine: nil)
             }
             // One list for the active and the paused machines: a machine shows one time and keeps its place.
             ForEach(model.sidebarMachines, id: \.machine.name) { entry in
@@ -48,9 +47,7 @@ struct Sidebar: View {
 
     private func activeSection(_ machine: Machine) -> some View {
         Section {
-            spaceRows(onMachine: machine.name)
-        } header: {
-            MachineHeader(name: machine.name, symbol: "server.rack") {
+            MachineHeader(name: machine.name, symbol: "xserve") {
                 if machine.state == .connected {
                     headerButton("New Space on \(machine.name)", symbol: "plus") { model.newSpace(machine: machine.name) }
                 }
@@ -60,17 +57,13 @@ struct Sidebar: View {
             .contextMenu {
                 Button("Pause") { model.pauseMachine(machine) }
             }
+            spaceRows(onMachine: machine.name)
         }
     }
 
     private func pausedSection(_ machine: Machine) -> some View {
         Section {
-            Text(model.resumingMachine == machine.name ? "Connecting…" : "Paused")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .selectionDisabled()
-        } header: {
-            MachineHeader(name: machine.name, symbol: "server.rack") {
+            MachineHeader(name: machine.name, symbol: "xserve") {
                 headerButton("Resume \(machine.name)", symbol: "play.fill") { resume(machine) }
                     .disabled(model.resumingMachine != nil)
             }
@@ -78,6 +71,10 @@ struct Sidebar: View {
                 Button("Resume") { resume(machine) }
                     .disabled(model.resumingMachine != nil)
             }
+            Text(model.resumingMachine == machine.name ? "Connecting…" : "Paused")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .selectionDisabled()
         }
     }
 
@@ -88,7 +85,9 @@ struct Sidebar: View {
             HStack(spacing: 8) {
                 SpaceBadge(name: model.displayName(of: space), spaceID: space.id)
                 Text(model.displayName(of: space))
-                    .lineLimit(1)
+                    // A list row on macOS has a limit of one line.
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 StatusDot(status: model.status(of: space))
             }
@@ -117,7 +116,7 @@ struct Sidebar: View {
     // MARK: Agents
 
     private var agentsSection: some View {
-        Section("Agents") {
+        Section {
             let groups = Attention.grouped(model.terminals.ordered)
             if groups.isEmpty {
                 Text("No agent status yet. Agents show here when they report their status.")
@@ -129,14 +128,18 @@ struct Sidebar: View {
             TimelineView(.periodic(from: .now, by: 60)) { _ in
                 ForEach(groups, id: \.status) { group in
                     Text("\(Self.title(of: group.status)) \(group.agents.count)")
-                        .font(.caption)
+                        .font(.callout.weight(.medium))
                         .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .selectionDisabled()
                     ForEach(group.agents, id: \.terminal.address) { agent in
                         agentRow(agent.terminal, isSubAgent: agent.isSubAgent)
                     }
                 }
             }
+        } header: {
+            Text("Agents")
+                .font(.body.weight(.medium))
         }
     }
 
@@ -158,11 +161,13 @@ struct Sidebar: View {
                     .foregroundStyle(.orange)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(agentTitle(terminal))
-                        .lineLimit(1)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text([terminal.programName, terminal.machine].compactMap { $0 }.joined(separator: " · "))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
                 if Attention.isPinned(terminal) {
@@ -175,6 +180,7 @@ struct Sidebar: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
+                        .fixedSize()
                 }
                 StatusDot(status: Attention.status(of: terminal), showsIdle: true)
             }
@@ -242,22 +248,26 @@ struct Sidebar: View {
     }
 }
 
-/// The header of the spaces of one machine: its name, then its buttons.
+/// The heading of the spaces of one machine: its name, then its buttons.
+/// It is a row, not a section header: a section header has a fixed height, so a long name cannot wrap in it.
 private struct MachineHeader<Buttons: View>: View {
     let name: String
     let symbol: String
     @ViewBuilder let buttons: Buttons
 
     var body: some View {
-        HStack(spacing: 6) {
+        // The symbol and the buttons stay on the first line of a name that wraps.
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
             Image(systemName: symbol)
             Text(name)
-                .lineLimit(1)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
             Spacer()
             buttons
         }
-        // A section header goes nearer to the edge of the sidebar than a row: this aligns the buttons with the rows.
-        .padding(.trailing, 12)
+        .font(.body.weight(.medium))
+        .foregroundStyle(.secondary)
+        .selectionDisabled()
     }
 }
 
@@ -267,9 +277,9 @@ private struct MachineStateDot: View {
     let reason: String
 
     var body: some View {
-        Circle()
-            .fill(color)
-            .frame(width: 7, height: 7)
+        Image(systemName: "circle.fill")
+            .font(.system(size: 7))
+            .foregroundStyle(color)
             .help(label)
             .accessibilityLabel(label)
     }
@@ -300,12 +310,27 @@ struct SpaceBadge: View {
     let spaceID: String
 
     var body: some View {
-        Text(name.first.map { String($0).uppercased() } ?? "")
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.white)
-            .frame(width: 18, height: 18)
-            .background(Self.color(for: spaceID), in: .rect(cornerRadius: 5))
-            .accessibilityHidden(true)
+        Group {
+            if let letterSymbol {
+                Image(systemName: letterSymbol)
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, Self.color(for: spaceID))
+                    .font(.system(size: 19))
+            } else {
+                // SF Symbols has a square only for the letters a to z and the digits.
+                Text(name.first.map { String($0).uppercased() } ?? "")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 18, height: 18)
+                    .background(Self.color(for: spaceID), in: .rect(cornerRadius: 5))
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private var letterSymbol: String? {
+        guard let first = name.lowercased().first, first.isASCII, first.isLetter || first.isNumber else { return nil }
+        return "\(first).square.fill"
     }
 
     /// Not `hashValue`: that changes each time the app starts. This is the FNV-1a hash.
@@ -315,31 +340,28 @@ struct SpaceBadge: View {
     }
 }
 
-/// A small circle that shows the status of an agent.
+/// A small symbol that shows the status of an agent.
 struct StatusDot: View {
     let status: AgentStatus?
-    /// Shows a ring for an idle agent. Without this, an idle agent shows no circle.
+    /// Shows a ring for an idle agent. Without this, an idle agent shows no symbol.
     var showsIdle = false
 
     var body: some View {
         switch status {
-        case .blocked: dot(.red, "Needs you")
-        case .done: dot(.green, "Done")
-        case .working: dot(.orange, "Working")
-        case .idle where showsIdle:
-            Circle()
-                .strokeBorder(.secondary, lineWidth: 1.5)
-                .frame(width: 8, height: 8)
-                .accessibilityLabel("Idle")
-                .help("Idle")
+        case .blocked: symbol("exclamationmark.circle.fill", .red, "Needs you")
+        case .done: symbol("checkmark.circle.fill", .green, "Done")
+        case .working:
+            symbol("progress.indicator", .orange, "Working")
+                .symbolEffect(.variableColor.iterative, options: .repeat(.continuous))
+        case .idle where showsIdle: symbol("circle", .secondary, "Idle")
         case .idle, nil: EmptyView()
         }
     }
 
-    private func dot(_ color: Color, _ label: String) -> some View {
-        Circle()
-            .fill(color)
-            .frame(width: 8, height: 8)
+    private func symbol(_ name: String, _ color: Color, _ label: String) -> some View {
+        Image(systemName: name)
+            .font(.caption)
+            .foregroundStyle(color)
             .accessibilityLabel(label)
             .help(label)
     }

@@ -32,7 +32,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: "gearshape"
         case .terminal: "terminal"
         case .alerts: "bell.badge"
-        case .machines: "server.rack"
+        case .machines: "xserve"
         }
     }
 
