@@ -17,37 +17,12 @@ struct Sidebar: View {
                     headerButton("New Space", symbol: "plus") { model.newSpace() }
                 }
             }
-            ForEach(model.machines) { machine in
-                Section {
-                    spaceRows(onMachine: machine.name)
-                } header: {
-                    MachineHeader(name: machine.name, symbol: "server.rack") {
-                        if machine.state == .connected {
-                            headerButton("New Space on \(machine.name)", symbol: "plus") { model.newSpace(machine: machine.name) }
-                        }
-                        headerButton("Pause \(machine.name)", symbol: "pause.fill") { model.pauseMachine(machine) }
-                        MachineStateDot(state: machine.state, reason: machine.reason)
-                    }
-                    .contextMenu {
-                        Button("Pause") { model.pauseMachine(machine) }
-                    }
-                }
-            }
-            ForEach(model.pausedMachines) { machine in
-                Section {
-                    Text(model.resumingMachine == machine.name ? "Connecting…" : "Paused")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .selectionDisabled()
-                } header: {
-                    MachineHeader(name: machine.name, symbol: "server.rack") {
-                        headerButton("Resume \(machine.name)", symbol: "play.fill") { resume(machine) }
-                            .disabled(model.resumingMachine != nil)
-                    }
-                    .contextMenu {
-                        Button("Resume") { resume(machine) }
-                            .disabled(model.resumingMachine != nil)
-                    }
+            // One list for the active and the paused machines: a machine shows one time and keeps its place.
+            ForEach(model.sidebarMachines, id: \.machine.name) { entry in
+                if entry.isPaused {
+                    pausedSection(entry.machine)
+                } else {
+                    activeSection(entry.machine)
                 }
             }
             agentsSection
@@ -66,6 +41,43 @@ struct Sidebar: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(machineError ?? "")
+        }
+    }
+
+    // MARK: Machines
+
+    private func activeSection(_ machine: Machine) -> some View {
+        Section {
+            spaceRows(onMachine: machine.name)
+        } header: {
+            MachineHeader(name: machine.name, symbol: "server.rack") {
+                if machine.state == .connected {
+                    headerButton("New Space on \(machine.name)", symbol: "plus") { model.newSpace(machine: machine.name) }
+                }
+                headerButton("Pause \(machine.name)", symbol: "pause.fill") { model.pauseMachine(machine) }
+                MachineStateDot(state: machine.state, reason: machine.reason)
+            }
+            .contextMenu {
+                Button("Pause") { model.pauseMachine(machine) }
+            }
+        }
+    }
+
+    private func pausedSection(_ machine: Machine) -> some View {
+        Section {
+            Text(model.resumingMachine == machine.name ? "Connecting…" : "Paused")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .selectionDisabled()
+        } header: {
+            MachineHeader(name: machine.name, symbol: "server.rack") {
+                headerButton("Resume \(machine.name)", symbol: "play.fill") { resume(machine) }
+                    .disabled(model.resumingMachine != nil)
+            }
+            .contextMenu {
+                Button("Resume") { resume(machine) }
+                    .disabled(model.resumingMachine != nil)
+            }
         }
     }
 
@@ -244,6 +256,8 @@ private struct MachineHeader<Buttons: View>: View {
             Spacer()
             buttons
         }
+        // A section header goes nearer to the edge of the sidebar than a row: this aligns the buttons with the rows.
+        .padding(.trailing, 12)
     }
 }
 

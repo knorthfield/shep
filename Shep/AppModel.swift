@@ -27,6 +27,10 @@ final class AppModel {
     private(set) var pausedMachines: [Machine] = AppModel.storedPausedMachines() {
         didSet { UserDefaults.standard.set(try? JSONEncoder().encode(pausedMachines), forKey: SettingsKey.pausedMachines) }
     }
+    /// The machines that the sidebar shows: those of the core and the paused ones.
+    var sidebarMachines: [(machine: Machine, isPaused: Bool)] {
+        Machine.sidebarList(active: machines, paused: pausedMachines)
+    }
     /// The name of the paused machine that Shep connects to again now.
     private(set) var resumingMachine: String?
     /// The pane that the Settings window shows.
@@ -82,11 +86,13 @@ final class AppModel {
         return .terminal(id: paneID, address: address)
     }
 
-    /// The name of a space: its name, or the last part of its folder, or of the folder of its first terminal.
+    /// The name of a space: its name, or the last part of the folder where its first terminal is now,
+    /// or of the folder where the space was made. This is the rule of Herdr.
     func displayName(of space: LayoutDocument.Space) -> String {
         if !space.name.isEmpty { return space.name }
-        let firstTerminal = space.tabs.lazy.flatMap(\.terminals).first.flatMap { terminals.terminals[$0] }
-        let folder = space.folder.isEmpty ? firstTerminal?.workingFolder ?? "" : space.folder
+        let liveFolder = space.tabs.lazy.flatMap(\.terminals)
+            .compactMap { self.terminals.terminals[$0]?.workingFolder }.first { !$0.isEmpty }
+        let folder = liveFolder ?? space.folder
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         if folder.isEmpty || folder == home { return "~" }
         return URL(fileURLWithPath: folder).lastPathComponent
@@ -209,7 +215,11 @@ final class AppModel {
         resumingMachine = machine.name
         defer { resumingMachine = nil }
         let error = await addMachine(machine.addParameters)
-        if error == nil { pausedMachines.removeAll { $0.name == machine.name } }
+        if error == nil {
+            // Read the list first: if not, the machine is in no list until the next poll and goes out of the sidebar.
+            if let connection { await readMachines(on: connection) }
+            pausedMachines.removeAll { $0.name == machine.name }
+        }
         return error
     }
 
@@ -529,22 +539,25 @@ final class AppModel {
     /// Reads the list of machines again and again, while this connection is the current one.
     private func pollMachines(on connection: CoreConnection) async {
         while self.connection === connection {
-            if let result = try? await connection.call("machine.list") {
-                let new = Machine.list(from: result)
-                let connected = { (machines: [Machine]) in Set(machines.filter { $0.state == .connected }.map(\.name)) }
-                let newlyConnected = connected(new).subtracting(connected(machines))
-                // A machine that came back to the core, for example added in Herdr, is not paused.
-                // Only a new name counts: a list from before the pause can still have the paused machine.
-                let added = Set(new.map(\.name)).subtracting(machines.map(\.name))
-                if pausedMachines.contains(where: { added.contains($0.name) }) {
-                    pausedMachines.removeAll { added.contains($0.name) }
-                }
-                if new != machines { machines = new }
-                layout.keepOnly(machines: connected(new))
-                for name in newlyConnected { await layout.load(machine: name) }
-            }
+            await readMachines(on: connection)
             try? await Task.sleep(for: Self.machinePollInterval)
         }
+    }
+
+    private func readMachines(on connection: CoreConnection) async {
+        guard let result = try? await connection.call("machine.list") else { return }
+        let new = Machine.list(from: result)
+        let connected = { (machines: [Machine]) in Set(machines.filter { $0.state == .connected }.map(\.name)) }
+        let newlyConnected = connected(new).subtracting(connected(machines))
+        // A machine that came back to the core, for example added in Herdr, is not paused.
+        // Only a new name counts: a list from before the pause can still have the paused machine.
+        let added = Set(new.map(\.name)).subtracting(machines.map(\.name))
+        if pausedMachines.contains(where: { added.contains($0.name) }) {
+            pausedMachines.removeAll { added.contains($0.name) }
+        }
+        if new != machines { machines = new }
+        layout.keepOnly(machines: connected(new))
+        for name in newlyConnected { await layout.load(machine: name) }
     }
 }
 

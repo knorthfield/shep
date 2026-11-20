@@ -38,6 +38,14 @@ struct Machine: Identifiable, Equatable, Codable {
         }
     }
 
+    /// The machines of the sidebar, by name. Each name occurs one time, so that a machine keeps its place
+    /// when it is paused. A paused machine can still be in the list of the core for a short time: it shows as paused.
+    static func sidebarList(active: [Machine], paused: [Machine]) -> [(machine: Machine, isPaused: Bool)] {
+        var names: Set<String> = []
+        let all = paused.map { (machine: $0, isPaused: true) } + active.map { (machine: $0, isPaused: false) }
+        return all.filter { names.insert($0.machine.name).inserted }.sorted { $0.machine.name < $1.machine.name }
+    }
+
     /// The parameters of `machine.add` that add this machine again with the same name.
     var addParameters: JSONValue {
         var parameters: JSONValue = ["name": .string(name), isCommand ? "via" : "target": .string(target)]

@@ -24,6 +24,16 @@ struct MachinesTests {
         #expect(machines[1].addParameters == ["name": "fly", "via": "fly ssh console -C"])
     }
 
+    @Test func theSidebarShowsEachMachineOneTimeByNameAndAPausedMachineAsPaused() {
+        let machine = { Machine(name: $0, target: $0, state: .connected, reason: "") }
+        let list = Machine.sidebarList(
+            active: [machine("quarterdeck"), machine("infinite-loop"), machine("infinite-loop"), machine("quarterdeck")],
+            paused: [machine("quarterdeck"), machine("box")]
+        )
+        #expect(list.map(\.machine.name) == ["box", "infinite-loop", "quarterdeck"])
+        #expect(list.map(\.isPaused) == [true, false, true])
+    }
+
     @Test func aTerminalAddressOfAMachineBecomesLocalForThatMachine() {
         #expect(LayoutDocument.localID("box/t7", machine: "box") == "t7")
         #expect(LayoutDocument.localID("t7", machine: nil) == "t7")
