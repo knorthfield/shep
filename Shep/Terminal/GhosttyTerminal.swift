@@ -353,12 +353,27 @@ final class GhosttyTerminal {
         return isTracking
     }
 
-    /// The bytes that one step of the mouse wheel sends to a program that asked for mouse events.
+    enum MouseAction {
+        case press, release, motion
+    }
+
+    enum MouseButton {
+        case left, right, middle, wheelUp, wheelDown
+    }
+
+    /// The bytes that a mouse event sends to a program that asked for mouse events.
+    /// Empty when the program did not ask for this type of event, for example a drag when it asked only for clicks.
     /// - Parameters:
+    ///   - isButtonPressed: True while a button is held down. A drag is a motion with a button held down.
     ///   - x: The place of the pointer from the left edge of the cells, in the same unit as `cellWidth`.
     ///   - y: The place of the pointer from the top edge of the cells.
-    func encodeMouseWheel(up: Bool, modifiers: KeyModifiers, x: CGFloat, y: CGFloat, cellWidth: CGFloat, cellHeight: CGFloat) -> Data {
+    func encodeMouse(
+        _ action: MouseAction, button: MouseButton, isButtonPressed: Bool, modifiers: KeyModifiers,
+        x: CGFloat, y: CGFloat, cellWidth: CGFloat, cellHeight: CGFloat
+    ) -> Data {
         ghostty_mouse_encoder_set_from_terminal(mouseEncoder, terminal)
+        var isPressed = isButtonPressed
+        ghostty_mouse_encoder_set(mouseEncoder, GHOSTTY_MOUSE_ENCODER_OPT_ANY_BUTTON_PRESSED, &isPressed)
         var size = GhosttyMouseEncoderSize()
         ghostty_sized_init(&size, MemoryLayout<GhosttyMouseEncoderSize>.size)
         size.cell_width = UInt32(max(cellWidth, 1))
@@ -366,8 +381,18 @@ final class GhosttyTerminal {
         size.screen_width = size.cell_width * UInt32(columns)
         size.screen_height = size.cell_height * UInt32(rowCount)
         ghostty_mouse_encoder_set(mouseEncoder, GHOSTTY_MOUSE_ENCODER_OPT_SIZE, &size)
-        ghostty_mouse_event_set_action(mouseEvent, GHOSTTY_MOUSE_ACTION_PRESS)
-        ghostty_mouse_event_set_button(mouseEvent, up ? GHOSTTY_MOUSE_BUTTON_FOUR : GHOSTTY_MOUSE_BUTTON_FIVE)
+        switch action {
+        case .press: ghostty_mouse_event_set_action(mouseEvent, GHOSTTY_MOUSE_ACTION_PRESS)
+        case .release: ghostty_mouse_event_set_action(mouseEvent, GHOSTTY_MOUSE_ACTION_RELEASE)
+        case .motion: ghostty_mouse_event_set_action(mouseEvent, GHOSTTY_MOUSE_ACTION_MOTION)
+        }
+        switch button {
+        case .left: ghostty_mouse_event_set_button(mouseEvent, GHOSTTY_MOUSE_BUTTON_LEFT)
+        case .right: ghostty_mouse_event_set_button(mouseEvent, GHOSTTY_MOUSE_BUTTON_RIGHT)
+        case .middle: ghostty_mouse_event_set_button(mouseEvent, GHOSTTY_MOUSE_BUTTON_MIDDLE)
+        case .wheelUp: ghostty_mouse_event_set_button(mouseEvent, GHOSTTY_MOUSE_BUTTON_FOUR)
+        case .wheelDown: ghostty_mouse_event_set_button(mouseEvent, GHOSTTY_MOUSE_BUTTON_FIVE)
+        }
         ghostty_mouse_event_set_mods(mouseEvent, modifiers.rawValue)
         ghostty_mouse_event_set_position(mouseEvent, GhosttyMousePosition(x: Float(max(x, 0)), y: Float(max(y, 0))))
         var output = [UInt8](repeating: 0, count: 128)

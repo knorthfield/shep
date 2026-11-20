@@ -178,12 +178,37 @@ struct TerminalSelectionTests {
         terminal.write(Data("\u{1B}[?1000h\u{1B}[?1006h".utf8))
         #expect(terminal.isMouseTracking)
         // The pointer is in the third column of the second row. Cells are 10 by 20.
-        let up = terminal.encodeMouseWheel(up: true, modifiers: [], x: 25, y: 30, cellWidth: 10, cellHeight: 20)
+        let up = terminal.encodeMouse(.press, button: .wheelUp, isButtonPressed: false, modifiers: [], x: 25, y: 30, cellWidth: 10, cellHeight: 20)
         #expect(String(decoding: up, as: UTF8.self) == "\u{1B}[<64;3;2M")
-        let down = terminal.encodeMouseWheel(up: false, modifiers: [], x: 25, y: 30, cellWidth: 10, cellHeight: 20)
+        let down = terminal.encodeMouse(.press, button: .wheelDown, isButtonPressed: false, modifiers: [], x: 25, y: 30, cellWidth: 10, cellHeight: 20)
         #expect(String(decoding: down, as: UTF8.self) == "\u{1B}[<65;3;2M")
         terminal.write(Data("\u{1B}[?1000l".utf8))
         #expect(!terminal.isMouseTracking)
+    }
+
+    @Test func aClickIsAMouseReportWithAPressAndARelease() {
+        terminal.write(Data("\u{1B}[?1000h\u{1B}[?1006h".utf8))
+        // The pointer is in the third column of the second row. Cells are 10 by 20.
+        func report(_ action: GhosttyTerminal.MouseAction, _ button: GhosttyTerminal.MouseButton) -> String {
+            let bytes = terminal.encodeMouse(action, button: button, isButtonPressed: action == .press, modifiers: [], x: 25, y: 30, cellWidth: 10, cellHeight: 20)
+            return String(decoding: bytes, as: UTF8.self)
+        }
+        #expect(report(.press, .left) == "\u{1B}[<0;3;2M")
+        #expect(report(.release, .left) == "\u{1B}[<0;3;2m")
+        #expect(report(.press, .right) == "\u{1B}[<2;3;2M")
+        #expect(report(.press, .middle) == "\u{1B}[<1;3;2M")
+    }
+
+    @Test func aDragIsAMouseReportOnlyWhenTheProgramAskedForDrags() {
+        func drag(x: CGFloat) -> String {
+            let bytes = terminal.encodeMouse(.motion, button: .left, isButtonPressed: true, modifiers: [], x: x, y: 30, cellWidth: 10, cellHeight: 20)
+            return String(decoding: bytes, as: UTF8.self)
+        }
+        terminal.write(Data("\u{1B}[?1000h\u{1B}[?1006h".utf8))
+        #expect(drag(x: 25) == "")
+        terminal.write(Data("\u{1B}[?1002h".utf8))
+        #expect(drag(x: 35) == "\u{1B}[<32;4;2M")
+        #expect(drag(x: 45) == "\u{1B}[<32;5;2M")
     }
 
     @Test func theHistoryKeepsManyRows() {

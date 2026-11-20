@@ -46,6 +46,10 @@ final class TerminalView: NSView {
     private var isRefreshScheduled = false
     /// The cell where the mouse button went down, for a selection by drag.
     private var selectionAnchor: (column: Int, row: Int)?
+    /// The button that is down and that the program got as a mouse report. Its drag and its release also go to the program.
+    private var reportedButton: GhosttyTerminal.MouseButton?
+    /// The cell of the last drag that the program got.
+    private var lastDragCell: (column: Int, row: Int)?
     /// The part of a scroll that is less than one row.
     private var scrollRemainder: CGFloat = 0
     /// Text that an input method composes, not yet sent to the program.
@@ -241,6 +245,7 @@ final class TerminalView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
+        if reportMouseDown(.left, event: event) { return }
         let cell = cell(at: event)
         switch event.clickCount {
         case 1:
@@ -255,13 +260,85 @@ final class TerminalView: NSView {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if reportMouseDragged(.left, event: event) { return }
         guard let selectionAnchor else { return }
         terminal.select(from: selectionAnchor, to: cell(at: event))
         refresh()
     }
 
     override func mouseUp(with event: NSEvent) {
+        if reportMouseUp(.left, event: event) { return }
         selectionAnchor = nil
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        if !reportMouseDown(.right, event: event) { super.rightMouseDown(with: event) }
+    }
+
+    override func rightMouseDragged(with event: NSEvent) {
+        if !reportMouseDragged(.right, event: event) { super.rightMouseDragged(with: event) }
+    }
+
+    override func rightMouseUp(with event: NSEvent) {
+        if !reportMouseUp(.right, event: event) { super.rightMouseUp(with: event) }
+    }
+
+    // The "other" buttons are the middle button (number 2) and the extra buttons. Only the middle button goes to the program.
+
+    override func otherMouseDown(with event: NSEvent) {
+        if event.buttonNumber != 2 || !reportMouseDown(.middle, event: event) { super.otherMouseDown(with: event) }
+    }
+
+    override func otherMouseDragged(with event: NSEvent) {
+        if event.buttonNumber != 2 || !reportMouseDragged(.middle, event: event) { super.otherMouseDragged(with: event) }
+    }
+
+    override func otherMouseUp(with event: NSEvent) {
+        if event.buttonNumber != 2 || !reportMouseUp(.middle, event: event) { super.otherMouseUp(with: event) }
+    }
+
+    /// Sends the press of a button to the program, if the program asked for the mouse. With Shift, the press is for Shep: it selects text.
+    /// - Returns: True when the press, and thus its drag and its release, are for the program.
+    private func reportMouseDown(_ button: GhosttyTerminal.MouseButton, event: NSEvent) -> Bool {
+        guard terminal.isMouseTracking, !event.modifierFlags.contains(.shift) else { return false }
+        reportedButton = button
+        lastDragCell = nil
+        sendMouse(.press, button: button, isButtonPressed: true, event: event)
+        return true
+    }
+
+    private func reportMouseDragged(_ button: GhosttyTerminal.MouseButton, event: NSEvent) -> Bool {
+        guard reportedButton == button else { return false }
+        // One report for each cell, not one for each point.
+        let cell = cell(at: event)
+        if let lastDragCell, lastDragCell == cell { return true }
+        lastDragCell = cell
+        sendMouse(.motion, button: button, isButtonPressed: true, event: event)
+        return true
+    }
+
+    private func reportMouseUp(_ button: GhosttyTerminal.MouseButton, event: NSEvent) -> Bool {
+        guard reportedButton == button else { return false }
+        reportedButton = nil
+        sendMouse(.release, button: button, isButtonPressed: false, event: event)
+        return true
+    }
+
+    private func sendMouse(_ action: GhosttyTerminal.MouseAction, button: GhosttyTerminal.MouseButton, isButtonPressed: Bool, event: NSEvent) {
+        let bytes = mouseReport(action, button: button, isButtonPressed: isButtonPressed, event: event)
+        if !bytes.isEmpty { onInput?(bytes) }
+    }
+
+    private func mouseReport(_ action: GhosttyTerminal.MouseAction, button: GhosttyTerminal.MouseButton, isButtonPressed: Bool, event: NSEvent) -> Data {
+        let point = convert(event.locationInWindow, from: nil)
+        let scale = window?.backingScaleFactor ?? 2
+        return terminal.encodeMouse(
+            action, button: button, isButtonPressed: isButtonPressed,
+            modifiers: KeyMapping.modifiers(event.modifierFlags),
+            x: (point.x - Self.padding.width) * scale, y: (point.y - Self.padding.height) * scale,
+            cellWidth: cellSize.width * scale, cellHeight: cellSize.height * scale
+        )
     }
 
     override func scrollWheel(with event: NSEvent) {
@@ -273,14 +350,7 @@ final class TerminalView: NSView {
         let steps = (0..<abs(rows))
         if terminal.isMouseTracking {
             // The program asked for the mouse: it gets the wheel, as in Ghostty and in Herdr.
-            let point = convert(event.locationInWindow, from: nil)
-            let scale = window?.backingScaleFactor ?? 2
-            let bytes = terminal.encodeMouseWheel(
-                up: rows > 0,
-                modifiers: KeyMapping.modifiers(event.modifierFlags),
-                x: (point.x - Self.padding.width) * scale, y: (point.y - Self.padding.height) * scale,
-                cellWidth: cellSize.width * scale, cellHeight: cellSize.height * scale
-            )
+            let bytes = mouseReport(.press, button: rows > 0 ? .wheelUp : .wheelDown, isButtonPressed: false, event: event)
             onInput?(Data(steps.flatMap { _ in bytes }))
         } else if terminal.isAlternateScreen {
             // A full-screen program that does not use the mouse has no history: it gets arrow keys, as in other terminals.
