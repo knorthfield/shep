@@ -81,6 +81,17 @@ struct TerminalScreenTests {
         #expect(terminal.takeReplies().isEmpty)
     }
 
+    @Test(arguments: ["\u{07}", "\u{1B}\\"])
+    func aProgramCanCopyTextToTheClipboard(terminator: String) {
+        var copiedTexts: [String] = []
+        terminal.onClipboardWrite = { copiedTexts.append($0) }
+        // The attach stream can divide a sequence between two blocks of bytes.
+        terminal.write(Data("\u{1B}]52;c;aGVs".utf8))
+        #expect(copiedTexts.isEmpty)
+        terminal.write(Data("bG8=\(terminator)".utf8))
+        #expect(copiedTexts == ["hello"])
+    }
+
     @Test func keysAreEncodedForTheProgram() {
         let a = KeyMapping.key(forKeyCode: 0)
         #expect(terminal.encodeKey(a, modifiers: [], text: "a", unshiftedCodepoint: 97, isRepeat: false) == Data("a".utf8))

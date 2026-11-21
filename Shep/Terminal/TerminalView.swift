@@ -60,6 +60,7 @@ final class TerminalView: NSView {
     /// - Parameter fontName: The name of a font family. Empty, or a font that is not installed: the monospaced font of macOS.
     init(terminal: GhosttyTerminal, fontName: String = "", fontSize: CGFloat) {
         self.terminal = terminal
+        terminal.onClipboardWrite = Self.copyToPasteboard
         // A font size of 0 comes from tests, which have no settings.
         let fontSize = fontSize > 0 ? fontSize : SettingsKey.standardFontSize
         let fonts = NSFontManager.shared
@@ -206,6 +207,10 @@ final class TerminalView: NSView {
 
     @objc func copy(_ sender: Any?) {
         guard let text = terminal.selectedText(), !text.isEmpty else { return }
+        Self.copyToPasteboard(text)
+    }
+
+    private static func copyToPasteboard(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
     }

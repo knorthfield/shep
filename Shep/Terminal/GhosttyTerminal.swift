@@ -79,6 +79,8 @@ final class GhosttyTerminal {
     private let mouseEvent: GhosttyMouseEvent
     /// The answers of the terminal to queries of the program, for example a cursor position report.
     private var replies = Data()
+    /// The program copied this text to the clipboard (OSC 52).
+    var onClipboardWrite: ((String) -> Void)?
 
     init?(columns: UInt16, rows: UInt16) {
         var terminal: GhosttyVt.GhosttyTerminal?
@@ -128,11 +130,28 @@ final class GhosttyTerminal {
             MainActor.assumeIsolated { owner.replies.append(bytes, count: count) }
         }
         ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_WRITE_PTY, unsafeBitCast(collectReply, to: UnsafeRawPointer.self))
+        let copyText: GhosttyTerminalClipboardWriteFn = { _, userdata, write in
+            guard let userdata, let write else { return }
+            let owner = Unmanaged<GhosttyTerminal>.fromOpaque(userdata).takeUnretainedValue()
+            let contents = UnsafeBufferPointer(start: write.pointee.contents, count: write.pointee.contents_len)
+            let text = contents.first { GhosttyTerminal.string($0.mime).hasPrefix("text/plain") }.map { GhosttyTerminal.string($0.data) }
+            var reply = GhosttyClipboardWriteReply()
+            reply.size = MemoryLayout<GhosttyClipboardWriteReply>.size
+            reply.result = text == nil ? GHOSTTY_CLIPBOARD_WRITE_RESULT_UNSUPPORTED : GHOSTTY_CLIPBOARD_WRITE_RESULT_SUCCESS
+            // libghostty calls this during `write`, which is on the main actor.
+            if let text { MainActor.assumeIsolated { owner.onClipboardWrite?(text) } }
+            write.pointee.reply(write, &reply)
+        }
+        ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE, unsafeBitCast(copyText, to: UnsafeRawPointer.self))
         // Without a limit of lines, the terminal keeps about one page of history.
         var historyLines = Self.historyLines
         ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES, &historyLines)
         var historyBytes = Self.historyLines * 1024
         ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES, &historyBytes)
+    }
+
+    private nonisolated static func string(_ string: GhosttyString) -> String {
+        String(decoding: UnsafeBufferPointer(start: string.ptr, count: string.len), as: UTF8.self)
     }
 
     /// The number of rows of history that a terminal keeps. The first paint of the core has fewer rows than this.
