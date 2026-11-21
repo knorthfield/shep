@@ -26,7 +26,7 @@ struct Sidebar: View {
             }
             agentsSection
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) { footer }
+        .safeAreaBar(edge: .bottom, spacing: 0) { footer }
         .alert("Rename Space", isPresented: isRenaming) {
             TextField("Name", text: $newName)
             Button("Rename") {
