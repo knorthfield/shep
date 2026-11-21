@@ -9,24 +9,32 @@ struct Sidebar: View {
     @State private var machineError: String?
 
     var body: some View {
-        List(selection: selection) {
-            Section {
-                MachineHeader(name: "This Computer", symbol: "desktopcomputer") {
-                    headerButton("New Space", symbol: "plus") { model.newSpace() }
+        // The machines and the agents scroll independently. The user drags the divider between them.
+        VSplitView {
+            List(selection: selection) {
+                Section {
+                    MachineHeader(name: "This Computer", symbol: "desktopcomputer") {
+                        headerButton("New Space", symbol: "plus") { model.newSpace() }
+                    }
+                    spaceRows(onMachine: nil)
                 }
-                spaceRows(onMachine: nil)
-            }
-            // One list for the active and the paused machines: a machine shows one time and keeps its place.
-            ForEach(model.sidebarMachines, id: \.machine.name) { entry in
-                if entry.isPaused {
-                    pausedSection(entry.machine)
-                } else {
-                    activeSection(entry.machine)
+                // One list for the active and the paused machines: a machine shows one time and keeps its place.
+                ForEach(model.sidebarMachines, id: \.machine.name) { entry in
+                    if entry.isPaused {
+                        pausedSection(entry.machine)
+                    } else {
+                        activeSection(entry.machine)
+                    }
                 }
             }
-            agentsSection
+            .frame(minHeight: 80)
+            List {
+                agentsSection
+            }
+            // A bar, not an inset: the rows that scroll under the footer fade out and do not show through it.
+            .safeAreaBar(edge: .bottom, spacing: 0) { footer }
+            .frame(minHeight: 80)
         }
-        .safeAreaBar(edge: .bottom, spacing: 0) { footer }
         .alert("Rename Space", isPresented: isRenaming) {
             TextField("Name", text: $newName)
             Button("Rename") {
