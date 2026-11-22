@@ -27,10 +27,13 @@ struct Sidebar: View {
                     }
                 }
             }
+            // Inside the split view, a list does not get the sidebar style by itself.
+            .listStyle(.sidebar)
             .frame(minHeight: 80)
             List {
                 agentsSection
             }
+            .listStyle(.sidebar)
             // A bar, not an inset: the rows that scroll under the footer fade out and do not show through it.
             .safeAreaBar(edge: .bottom, spacing: 0) { footer }
             .frame(minHeight: 80)
