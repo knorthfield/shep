@@ -1,18 +1,13 @@
 import AppKit
 
 /// Homebrew replaces the app on the disk while the app runs, and does not start it again.
-/// This finds the new version on the disk and starts it when the app is idle.
+/// This finds the new version on the disk and starts it when the copy is complete.
 @MainActor
 final class UpdateRelauncher {
     private static let runningVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
 
-    private let isBusy: () -> Bool
     private var timer: Timer?
     private var versionAtLastCheck = runningVersion
-
-    init(isBusy: @escaping () -> Bool = { false }) {
-        self.isBusy = isBusy
-    }
 
     func start() {
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
@@ -37,18 +32,19 @@ final class UpdateRelauncher {
         let isUpdateReady = Self.isUpdateReady(
             running: Self.runningVersion, installed: installedVersion, atLastCheck: versionAtLastCheck)
         versionAtLastCheck = installedVersion
-        guard isUpdateReady, !NSApp.isActive, !isBusy() else { return }
+        guard isUpdateReady else { return }
         relaunch()
     }
 
     private func relaunch() {
         // The new version must start after this one stops: two copies would compete for the
-        // same hot key, menu bar icon and files.
+        // same hot key, menu bar icon and files. If Shep is in front, the new copy comes to the front.
+        let openOptions = NSApp.isActive ? "" : "-g"
         let waitThenOpen = Process()
         waitThenOpen.executableURL = URL(fileURLWithPath: "/bin/sh")
         waitThenOpen.arguments = [
-            "-c", #"while kill -0 "$0" 2>/dev/null; do sleep 0.2; done; open -g "$1""#,
-            String(ProcessInfo.processInfo.processIdentifier), Bundle.main.bundlePath,
+            "-c", #"while kill -0 "$0" 2>/dev/null; do sleep 0.2; done; open $2 "$1""#,
+            String(ProcessInfo.processInfo.processIdentifier), Bundle.main.bundlePath, openOptions,
         ]
         guard (try? waitThenOpen.run()) != nil else { return }
         NSApp.terminate(nil)
