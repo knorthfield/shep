@@ -358,6 +358,11 @@ final class GhosttyTerminal {
         ghostty_terminal_scroll_viewport(terminal, behavior)
     }
 
+    /// Removes the history above the screen.
+    func clearHistory() {
+        write(Data("\u{1B}[3J".utf8))
+    }
+
     /// True when a full-screen program, for example an editor, has the screen. That screen has no history.
     var isAlternateScreen: Bool {
         var screen = GHOSTTY_TERMINAL_SCREEN_PRIMARY

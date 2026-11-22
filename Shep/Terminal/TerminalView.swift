@@ -163,7 +163,17 @@ final class TerminalView: NSView {
     // MARK: Keyboard
 
     override func keyDown(with event: NSEvent) {
-        // Shep's menu gets the Command keys.
+        if let bytes = KeyMapping.commandKeyBytes(keyCode: event.keyCode, flags: event.modifierFlags) {
+            terminal.scrollToBottom()
+            scheduleRefresh()
+            onInput?(bytes)
+            return
+        }
+        if event.keyCode == 40, KeyMapping.hasOnlyCommand(event.modifierFlags) {
+            clearScreen()
+            return
+        }
+        // Shep's menu gets the other Command keys.
         guard !event.modifierFlags.contains(.command) else { return super.keyDown(with: event) }
         terminal.scrollToBottom()
         scheduleRefresh()
@@ -198,6 +208,16 @@ final class TerminalView: NSView {
             isRepeat: event.isARepeat
         )
         if !bytes.isEmpty { onInput?(bytes) }
+    }
+
+    /// Command-K, as in Terminal.app and Ghostty: removes the history, and Control-L makes the shell clear the screen
+    /// and show its prompt again. A full-screen program, for example an editor, keeps its screen.
+    private func clearScreen() {
+        guard !terminal.isAlternateScreen else { return }
+        terminal.clearHistory()
+        terminal.scrollToBottom()
+        scheduleRefresh()
+        onInput?(Data([0x0C]))
     }
 
     /// The input system calls this for keys that make no text, for example Return. `keyDown` sends those keys.

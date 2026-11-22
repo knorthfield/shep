@@ -121,6 +121,20 @@ struct KeyMappingTests {
         #expect(KeyMapping.text(nil) == "")
     }
 
+    @Test func commandLeftMovesToTheStartOfTheLine() {
+        #expect(KeyMapping.commandKeyBytes(keyCode: 123, flags: [.command, .numericPad, .function]) == Data([0x01]))
+    }
+
+    @Test func commandRightMovesToTheEndOfTheLine() {
+        #expect(KeyMapping.commandKeyBytes(keyCode: 124, flags: [.command, .numericPad, .function]) == Data([0x05]))
+    }
+
+    @Test func otherCommandKeysGoToTheMenu() {
+        #expect(KeyMapping.commandKeyBytes(keyCode: 123, flags: [.command, .shift]) == nil)
+        #expect(KeyMapping.commandKeyBytes(keyCode: 123, flags: [.command, .option]) == nil)
+        #expect(KeyMapping.commandKeyBytes(keyCode: 0, flags: [.command]) == nil)
+    }
+
     @Test func modifierFlagsBecomeEncoderModifiers() {
         #expect(KeyMapping.modifiers([.shift, .control]) == [.shift, .control])
         #expect(KeyMapping.modifiers([.option, .command]) == [.option, .command])
@@ -174,6 +188,14 @@ struct TerminalSelectionTests {
         _ = terminal.refresh()
         #expect(terminal.rows[0][0].text == "h")
         terminal.scrollToBottom()
+        _ = terminal.refresh()
+        #expect(terminal.rows[0][0].text == "3")
+    }
+
+    @Test func clearHistoryRemovesTheRowsAboveTheScreen() {
+        terminal.write(Data("\r\n3\r\n4\r\n5\r\n6".utf8))
+        terminal.clearHistory()
+        terminal.scroll(rows: -2)
         _ = terminal.refresh()
         #expect(terminal.rows[0][0].text == "3")
     }

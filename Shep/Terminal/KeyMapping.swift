@@ -17,6 +17,22 @@ enum KeyMapping {
         return modifiers
     }
 
+    /// The bytes of a Command key that a terminal sends to the program, as Ghostty and Terminal.app do:
+    /// Command-Left is Control-A (start of the line) and Command-Right is Control-E (end of the line).
+    static func commandKeyBytes(keyCode: UInt16, flags: NSEvent.ModifierFlags) -> Data? {
+        guard hasOnlyCommand(flags) else { return nil }
+        switch keyCode {
+        case 123: return Data([0x01])
+        case 124: return Data([0x05])
+        default: return nil
+        }
+    }
+
+    /// True when Command is the only modifier key that is held down.
+    static func hasOnlyCommand(_ flags: NSEvent.ModifierFlags) -> Bool {
+        flags.intersection([.shift, .control, .option, .command]) == .command
+    }
+
     /// The text of a key press for the encoder: no control characters and no function-key codes of macOS.
     static func text(_ characters: String?) -> String {
         guard let characters, let first = characters.unicodeScalars.first else { return "" }
