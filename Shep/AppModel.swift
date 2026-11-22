@@ -34,6 +34,7 @@ final class AppModel {
     }
     /// The commits that are not pushed and not pulled in the folder of each space, by space id.
     private(set) var gitCounts: [String: GitCounts] = [:]
+    private(set) var unreleased: [String: CommitsSinceRelease] = [:]
     /// The name of the paused machine that Shep connects to again now.
     private(set) var resumingMachine: String?
     /// The pane that the Settings window shows.
@@ -565,19 +566,29 @@ final class AppModel {
 
     private func readGitCounts(on connection: CoreConnection) async {
         var new: [String: GitCounts] = [:]
+        var newUnreleased: [String: CommitsSinceRelease] = [:]
         for space in spaces {
             let folder = folder(of: space)
             guard !folder.isEmpty else { continue }
-            var parameters: JSONValue = ["argv": .array(GitCounts.command.map { .string($0) }), "cwd": .string(folder), "timeout": 10]
-            if let machine = space.machine { parameters["on"] = .string(machine) }
-            if let result = try? await connection.call("machine.exec", parameters) {
+            func exec(_ command: [String]) async -> JSONValue? {
+                var parameters: JSONValue = ["argv": .array(command.map { .string($0) }), "cwd": .string(folder), "timeout": 10]
+                if let machine = space.machine { parameters["on"] = .string(machine) }
+                return try? await connection.call("machine.exec", parameters)
+            }
+            // No answer, for example the machine is away: the space keeps what it showed.
+            if let result = await exec(GitCounts.command) {
                 new[space.id] = GitCounts(execResult: result)
             } else {
-                // No answer, for example the machine is away: the space keeps what it showed.
                 new[space.id] = gitCounts[space.id]
+            }
+            if let result = await exec(CommitsSinceRelease.command) {
+                newUnreleased[space.id] = CommitsSinceRelease(execResult: result)
+            } else {
+                newUnreleased[space.id] = unreleased[space.id]
             }
         }
         if new != gitCounts { gitCounts = new }
+        if newUnreleased != unreleased { unreleased = newUnreleased }
     }
 
     private func readMachines(on connection: CoreConnection) async {
