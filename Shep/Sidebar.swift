@@ -295,23 +295,33 @@ private struct MachineHeader<Buttons: View>: View {
     }
 }
 
-/// A small circle that shows if the core has a connection to a machine.
+/// A small symbol that shows if the core has a connection to a machine.
+/// Each state has a different shape, so the colour is not the only sign.
 private struct MachineStateDot: View {
     let state: Machine.State
     let reason: String
 
     var body: some View {
-        Image(systemName: "circle.fill")
-            .imageScale(.small)
+        Image(systemName: symbol)
+            .font(.caption)
             .foregroundStyle(color)
             .help(label)
             .accessibilityLabel(label)
     }
 
+    private var symbol: String {
+        switch state {
+        case .connected: "checkmark.circle.fill"
+        case .connecting: "ellipsis.circle"
+        case .needsLogin: "lock.circle.fill"
+        case .unreachable: "xmark.circle.fill"
+        }
+    }
+
     private var color: Color {
         switch state {
         case .connected: .green
-        case .connecting: .gray
+        case .connecting: .secondary
         case .needsLogin, .unreachable: .red
         }
     }
