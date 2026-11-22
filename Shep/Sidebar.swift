@@ -306,7 +306,6 @@ private struct MachineStateDot: View {
 
     var body: some View {
         Image(systemName: symbol)
-            .font(.caption)
             .foregroundStyle(color)
             .help(label)
             .accessibilityLabel(label)
