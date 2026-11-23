@@ -152,8 +152,12 @@ struct Sidebar: View {
                 }
             }
         } header: {
-            Text("Agents")
-                .font(.body.weight(.medium))
+            // The same layout as the heading of a machine.
+            HStack(spacing: 6) {
+                Image(systemName: "brain.head.profile")
+                Text("Agents")
+            }
+            .font(.body.weight(.medium))
         }
     }
 
