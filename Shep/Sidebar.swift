@@ -34,7 +34,8 @@ struct Sidebar: View {
                 agentsSection
             }
             .listStyle(.sidebar)
-            // A bar, not an inset: the rows that scroll under the footer fade out and do not show through it.
+            // Bars, not insets: the rows that scroll under the heading and the footer fade out and do not show through them.
+            .safeAreaBar(edge: .top, spacing: 0) { agentsHeading }
             .safeAreaBar(edge: .bottom, spacing: 0) { footer }
             .frame(minHeight: 80)
         }
@@ -151,14 +152,21 @@ struct Sidebar: View {
                     }
                 }
             }
-        } header: {
-            // The same layout as the heading of a machine.
-            HStack(spacing: 6) {
-                Image(systemName: "brain.head.profile")
-                Text("Agents")
-            }
-            .font(.body.weight(.medium))
         }
+    }
+
+    /// The heading of the agents. It is not a section header: a section header scrolls away with the rows.
+    private var agentsHeading: some View {
+        // The same layout as the heading of a machine.
+        HStack(spacing: 6) {
+            Image(systemName: "brain.head.profile")
+            Text("Agents")
+        }
+        .font(.body.weight(.medium))
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
     }
 
     private static func title(of status: AgentStatus) -> String {
