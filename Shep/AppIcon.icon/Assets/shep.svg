@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Shep: a player token with the terminal prompt. -->
+  <circle cx="236" cy="790" r="92" fill="#303438"/>
+  <g fill="none" stroke="#F4F1E9" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M190 756 L232 786 L190 816"/>
+    <path d="M250 816 L294 816"/>
+  </g>
+</svg>

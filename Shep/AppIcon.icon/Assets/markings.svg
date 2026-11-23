@@ -1,11 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <g fill="none" stroke="#F4F1E9" stroke-width="26" stroke-linecap="round" stroke-linejoin="round">
-    <!-- The terminal prompt, where the eye is. -->
-    <path d="M414 452 L458 482 L414 512"/>
-    <path d="M488 512 L544 512"/>
-    <!-- The white collar of the collie. -->
-    <path d="M716 372 C690 500 620 606 486 664"/>
-    <!-- The fold of the ear. -->
-    <path d="M560 178 C590 196 622 240 650 292"/>
+  <g fill="none" stroke="#FFFFFF" stroke-width="24" stroke-linecap="round" stroke-linejoin="round">
+    <!-- The pen, open to the field. -->
+    <path d="M720 160 L904 160 L904 364 L720 364"/>
+    <!-- The agents. -->
+    <circle cx="812" cy="262" r="46"/>
+    <circle cx="604" cy="316" r="46"/>
+    <circle cx="436" cy="438" r="46"/>
+    <circle cx="640" cy="530" r="46"/>
+    <!-- Shep sweeps them into the pen. -->
+    <path d="M330 700 C380 600 440 560 520 540"/><path d="M467 523 L520 540"/><path d="M481 580 L520 540"/>
+    <path d="M360 800 C520 800 680 740 760 620"/><path d="M709 643 L760 620"/><path d="M758 676 L760 620"/>
   </g>
 </svg>
