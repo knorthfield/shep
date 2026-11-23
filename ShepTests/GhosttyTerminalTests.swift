@@ -129,6 +129,11 @@ struct KeyMappingTests {
         #expect(KeyMapping.commandKeyBytes(keyCode: 124, flags: [.command, .numericPad, .function]) == Data([0x05]))
     }
 
+    @Test func commandBackspaceDeletesToTheStartOfTheLine() {
+        #expect(KeyMapping.commandKeyBytes(keyCode: 51, flags: [.command]) == Data([0x15]))
+        #expect(KeyMapping.commandKeyBytes(keyCode: 51, flags: [.command, .shift]) == nil)
+    }
+
     @Test func otherCommandKeysGoToTheMenu() {
         #expect(KeyMapping.commandKeyBytes(keyCode: 123, flags: [.command, .shift]) == nil)
         #expect(KeyMapping.commandKeyBytes(keyCode: 123, flags: [.command, .option]) == nil)

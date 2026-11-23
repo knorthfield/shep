@@ -18,10 +18,12 @@ enum KeyMapping {
     }
 
     /// The bytes of a Command key that a terminal sends to the program, as Ghostty and Terminal.app do:
-    /// Command-Left is Control-A (start of the line) and Command-Right is Control-E (end of the line).
+    /// Command-Left is Control-A (start of the line), Command-Right is Control-E (end of the line), and
+    /// Command-Backspace is Control-U (delete to the start of the line).
     static func commandKeyBytes(keyCode: UInt16, flags: NSEvent.ModifierFlags) -> Data? {
         guard hasOnlyCommand(flags) else { return nil }
         switch keyCode {
+        case 51: return Data([0x15])
         case 123: return Data([0x01])
         case 124: return Data([0x05])
         default: return nil
