@@ -329,6 +329,40 @@ final class GhosttyTerminal {
     func selectedText() -> String? {
         var selection = GhosttySelection()
         guard ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_SELECTION, &selection) == GHOSTTY_SUCCESS else { return nil }
+        return text(of: &selection)
+    }
+
+    /// The web link at a cell: a link that the program made (OSC 8), or a URL in the text. Nil: no link is there.
+    func link(at cell: (column: Int, row: Int)) -> URL? {
+        var reference = GhosttyGridRef()
+        guard gridReference(cell, into: &reference) else { return nil }
+        var length = 0
+        if ghostty_grid_ref_hyperlink_uri(&reference, nil, 0, &length) == GHOSTTY_OUT_OF_SPACE, length > 0 {
+            var bytes = [UInt8](repeating: 0, count: length)
+            guard ghostty_grid_ref_hyperlink_uri(&reference, &bytes, length, &length) == GHOSTTY_SUCCESS else { return nil }
+            return URL(string: String(decoding: bytes.prefix(length), as: UTF8.self))
+        }
+        // The text around the cell, as far as a space or a quote mark. It continues on the next row if the line wraps.
+        var options = GhosttyTerminalSelectWordOptions()
+        ghostty_sized_init(&options, MemoryLayout<GhosttyTerminalSelectWordOptions>.size)
+        options.ref = reference
+        var selection = GhosttySelection()
+        let found = Self.linkBoundaries.withUnsafeBufferPointer { boundaries in
+            options.boundary_codepoints = boundaries.baseAddress
+            options.boundary_codepoints_len = boundaries.count
+            return ghostty_terminal_select_word(terminal, &options, &selection) == GHOSTTY_SUCCESS
+        }
+        guard found, let text = text(of: &selection), let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue),
+              let url = detector.firstMatch(in: text, range: NSRange(text.startIndex..., in: text))?.url,
+              url.scheme == "http" || url.scheme == "https" else { return nil }
+        return url
+    }
+
+    /// The characters that end a URL in the text of the screen.
+    private static let linkBoundaries: [UInt32] = [" ", "\t", "\"", "'", "`", "<", ">", "|"].map { $0.unicodeScalars.first!.value }
+
+    /// The text of a selection, as the program wrote it: a line that the terminal wrapped is one line.
+    private func text(of selection: inout GhosttySelection) -> String? {
         var formatter: GhosttyFormatter?
         guard ghostty_formatter_terminal_new(nil, &formatter, terminal) == GHOSTTY_SUCCESS else { return nil }
         defer { ghostty_formatter_free(formatter) }

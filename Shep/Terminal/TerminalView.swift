@@ -270,8 +270,13 @@ final class TerminalView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
-        if reportMouseDown(.left, event: event) { return }
         let cell = cell(at: event)
+        // Command-click opens a link, as in Terminal.app and Ghostty, also in a program that uses the mouse.
+        if KeyMapping.hasOnlyCommand(event.modifierFlags), let url = terminal.link(at: cell) {
+            NSWorkspace.shared.open(url)
+            return
+        }
+        if reportMouseDown(.left, event: event) { return }
         switch event.clickCount {
         case 1:
             selectionAnchor = cell

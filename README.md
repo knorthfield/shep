@@ -40,6 +40,7 @@ Shep has no release yet. See [Build](#build).
 - Command-W closes the tab and Shift-Command-W closes the pane. Their terminals stop.
 - Command-1 to Command-9 select a tab. Control-1 to Control-9 select a space.
 - Command-[ and Command-] go to the previous and the next agent.
+- Command-click a link in a terminal to open it. Command-Backspace deletes the line.
 - **Command Palette…** (Shift-Command-P) shows all commands and their keys.
 - Right-click a space or a tab to rename it or close it. Right-click an agent to pin it or to mark
   it as unread.

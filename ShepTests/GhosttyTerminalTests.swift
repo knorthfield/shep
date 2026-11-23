@@ -147,6 +147,30 @@ struct KeyMappingTests {
 }
 
 @MainActor
+struct TerminalLinkTests {
+    @Test func aURLInTheTextIsALinkWithoutThePunctuationAfterIt() throws {
+        let terminal = try #require(GhosttyTerminal(columns: 80, rows: 4))
+        terminal.write(Data("see (https://example.com/a?b=1). README.md".utf8))
+        #expect(terminal.link(at: (column: 12, row: 0)) == URL(string: "https://example.com/a?b=1"))
+        #expect(terminal.link(at: (column: 1, row: 0)) == nil)
+        #expect(terminal.link(at: (column: 36, row: 0)) == nil)
+    }
+
+    @Test func aURLThatWrapsIsOneLink() throws {
+        let terminal = try #require(GhosttyTerminal(columns: 10, rows: 4))
+        terminal.write(Data("https://example.com/abcdef".utf8))
+        #expect(terminal.link(at: (column: 3, row: 2)) == URL(string: "https://example.com/abcdef"))
+    }
+
+    @Test func aLinkThatTheProgramMadeOpensItsURL() throws {
+        let terminal = try #require(GhosttyTerminal(columns: 80, rows: 4))
+        terminal.write(Data("\u{1B}]8;;https://example.com/x\u{1B}\\click\u{1B}]8;;\u{1B}\\ here".utf8))
+        #expect(terminal.link(at: (column: 2, row: 0)) == URL(string: "https://example.com/x"))
+        #expect(terminal.link(at: (column: 7, row: 0)) == nil)
+    }
+}
+
+@MainActor
 struct TerminalSelectionTests {
     private let terminal = GhosttyTerminal(columns: 20, rows: 4)!
 
