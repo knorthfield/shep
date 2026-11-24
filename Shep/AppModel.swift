@@ -34,7 +34,6 @@ final class AppModel {
     }
     /// The commits that are not pushed and not pulled in the folder of each space, by space id.
     private(set) var gitCounts: [String: GitCounts] = [:]
-    private(set) var unreleased: [String: CommitsSinceRelease] = [:]
     /// The name of the paused machine that Shep connects to again now.
     private(set) var resumingMachine: String?
     /// The pane that the Settings window shows.
@@ -566,7 +565,6 @@ final class AppModel {
 
     private func readGitCounts(on connection: CoreConnection) async {
         var new: [String: GitCounts] = [:]
-        var newUnreleased: [String: CommitsSinceRelease] = [:]
         for space in spaces {
             let folder = folder(of: space)
             guard !folder.isEmpty else { continue }
@@ -581,14 +579,8 @@ final class AppModel {
             } else {
                 new[space.id] = gitCounts[space.id]
             }
-            if let result = await exec(CommitsSinceRelease.command) {
-                newUnreleased[space.id] = CommitsSinceRelease(execResult: result)
-            } else {
-                newUnreleased[space.id] = unreleased[space.id]
-            }
         }
         if new != gitCounts { gitCounts = new }
-        if newUnreleased != unreleased { unreleased = newUnreleased }
     }
 
     private func readMachines(on connection: CoreConnection) async {

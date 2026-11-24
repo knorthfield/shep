@@ -101,7 +101,7 @@ struct Sidebar: View {
                     .lineLimit(nil)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer()
-                GitCountsLabel(counts: model.gitCounts[space.id], unreleased: model.unreleased[space.id])
+                GitCountsLabel(counts: model.gitCounts[space.id])
                 StatusDot(status: model.status(of: space))
             }
             .tag(space.id)
@@ -388,11 +388,10 @@ struct SpaceBadge: View {
     }
 }
 
-/// The number of commits that are not pushed (up, green), not pulled (down, red) and not released (tag, blue).
+/// The number of commits that are not pushed (up, green) and not pulled (down, red).
 /// A count of zero does not show.
 private struct GitCountsLabel: View {
     let counts: GitCounts?
-    let unreleased: CommitsSinceRelease?
 
     var body: some View {
         HStack(spacing: 4) {
@@ -401,9 +400,6 @@ private struct GitCountsLabel: View {
             }
             if let counts, counts.behind > 0 {
                 count(counts.behind, symbol: "arrow.down", color: .red, label: "\(counts.behind) commits not pulled")
-            }
-            if let unreleased, unreleased.count > 0 {
-                count(unreleased.count, symbol: "tag", color: .blue, label: "\(unreleased.count) commits since \(unreleased.tag)")
             }
         }
         .font(.caption)
