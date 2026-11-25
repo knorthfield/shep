@@ -7,28 +7,37 @@ struct Sidebar: View {
     @State private var spaceToRename: LayoutDocument.Space?
     @State private var newName = ""
     @State private var machineError: String?
+    @State private var filter = ""
+    @FocusState private var isFilterFocused: Bool
+
+    private static let localMachineName = "This Computer"
 
     var body: some View {
         // The machines and the agents scroll independently. The user drags the divider between them.
         VSplitView {
             List(selection: selection) {
-                Section {
-                    MachineHeader(name: "This Computer", symbol: "desktopcomputer") {
-                        headerButton("New Space", symbol: "plus") { model.newSpace() }
+                if showsSection(ofMachine: nil) {
+                    Section {
+                        MachineHeader(name: Self.localMachineName, symbol: "desktopcomputer") {
+                            headerButton("New Space", symbol: "plus") { model.newSpace() }
+                        }
+                        spaceRows(onMachine: nil)
                     }
-                    spaceRows(onMachine: nil)
                 }
                 // One list for the active and the paused machines: a machine shows one time and keeps its place.
                 ForEach(model.sidebarMachines, id: \.machine.name) { entry in
                     if entry.isPaused {
-                        pausedSection(entry.machine)
-                    } else {
+                        if filter.isEmpty || SidebarFilter.matches(entry.machine.name, filter: filter) {
+                            pausedSection(entry.machine)
+                        }
+                    } else if showsSection(ofMachine: entry.machine.name) {
                         activeSection(entry.machine)
                     }
                 }
             }
             // Inside the split view, a list does not get the sidebar style by itself.
             .listStyle(.sidebar)
+            .safeAreaBar(edge: .top, spacing: 0) { filterField }
             .frame(minHeight: 80)
             List {
                 agentsSection
@@ -92,8 +101,52 @@ struct Sidebar: View {
 
     // MARK: Spaces
 
+    private var filterField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField("Filter", text: $filter)
+                .textFieldStyle(.plain)
+                .focused($isFilterFocused)
+                .onSubmit {
+                    if let first = model.spaces.first(where: shows) { model.activeSpaceID = first.id }
+                    leaveFilter()
+                }
+                .onExitCommand { leaveFilter() }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 6)
+        .task(id: model.isSidebarFilterFocused) {
+            guard model.isSidebarFilterFocused else { return }
+            // The field of a hidden sidebar can take the keyboard only after the sidebar is back in the window.
+            for _ in 0..<20 where !isFilterFocused {
+                isFilterFocused = true
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            model.isSidebarFilterFocused = isFilterFocused
+        }
+        .onChange(of: isFilterFocused) { model.isSidebarFilterFocused = isFilterFocused }
+    }
+
+    /// Clears the filter and gives the keyboard back to the terminal.
+    private func leaveFilter() {
+        filter = ""
+        // The views of a newly selected space are in the window after SwiftUI drew it.
+        Task { model.focusActivePane() }
+    }
+
+    private func shows(_ space: LayoutDocument.Space) -> Bool {
+        SidebarFilter.shows(
+            spaceName: model.displayName(of: space), machineName: space.machine ?? Self.localMachineName, filter: filter)
+    }
+
+    /// With a filter, the section of a machine shows only when it has a space to show.
+    private func showsSection(ofMachine machine: String?) -> Bool {
+        filter.isEmpty || model.spaces.contains { $0.machine == machine && shows($0) }
+    }
+
     private func spaceRows(onMachine machine: String?) -> some View {
-        ForEach(model.spaces.filter { $0.machine == machine }) { space in
+        ForEach(model.spaces.filter { $0.machine == machine && shows($0) }) { space in
             HStack(spacing: 8) {
                 SpaceBadge(name: model.displayName(of: space), spaceID: space.id)
                 Text(model.displayName(of: space))

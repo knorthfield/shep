@@ -39,6 +39,9 @@ Shep has no release yet. See [Build](#build).
 - **New Tab** is Command-T. **Split Right** is Command-D and **Split Down** is Shift-Command-D.
 - Command-W closes the tab and Shift-Command-W closes the pane. Their terminals stop.
 - Command-1 to Command-9 select a tab. Control-1 to Control-9 select a space.
+- The **Filter** field at the top of the sidebar shows only the spaces whose name, or the name of
+  their machine, contains the text. **Filter Spaces** (Option-Command-F) puts the cursor in it.
+  Return opens the first space in the list. Escape clears the filter.
 - Command-[ and Command-] go to the previous and the next agent.
 - Command-click a link in a terminal to open it. Command-Backspace deletes the line.
 - **Command Palette…** (Shift-Command-P) shows all commands and their keys.

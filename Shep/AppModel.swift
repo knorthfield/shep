@@ -40,6 +40,8 @@ final class AppModel {
     var settingsPane = SettingsPane.general
     var isSidebarVisible = true
     var isPaletteVisible = false
+    /// The filter field of the sidebar has the keyboard.
+    var isSidebarFilterFocused = false
     @ObservationIgnored private let alerts = Alerts()
 
     /// The space that the window shows. Nil or not found: the first space.

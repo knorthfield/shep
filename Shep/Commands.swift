@@ -40,6 +40,10 @@ struct ShepCommand: Identifiable {
         ShepCommand(title: "Close Pane", menu: .file, shortcut: .init("w", modifiers: [.command, .shift])) { $0.closePane() },
         ShepCommand(title: "Command Palette…", menu: .view, shortcut: .init("p", modifiers: [.command, .shift])) { $0.isPaletteVisible = true },
         ShepCommand(title: "Show or Hide Sidebar", menu: .view, shortcut: .init("b")) { $0.isSidebarVisible.toggle() },
+        ShepCommand(title: "Filter Spaces", menu: .view, shortcut: .init("f", modifiers: [.command, .option])) {
+            $0.isSidebarVisible = true
+            $0.isSidebarFilterFocused = true
+        },
         ShepCommand(title: "Split Right", menu: .view, shortcut: .init("d")) { $0.split(.row) },
         ShepCommand(title: "Split Down", menu: .view, shortcut: .init("d", modifiers: [.command, .shift])) { $0.split(.column) },
         ShepCommand(title: "Zoom Pane", menu: .view, shortcut: .init(.return, modifiers: [.command, .shift])) { $0.toggleZoom() },
