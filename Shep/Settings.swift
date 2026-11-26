@@ -174,7 +174,7 @@ private struct MachineSettings: View {
                     .frame(width: 180)
                     .onSubmit(addMachine)
                 Button("Add", action: addMachine)
-                    .disabled(newMachineTarget.isEmpty || isAddingMachine)
+                    .disabled(Machine.target(fromInput: newMachineTarget).isEmpty || isAddingMachine)
             }
             if let machineError {
                 Text(machineError)
@@ -196,7 +196,7 @@ private struct MachineSettings: View {
     }
 
     private func addMachine() {
-        guard !newMachineTarget.isEmpty else { return }
+        guard !Machine.target(fromInput: newMachineTarget).isEmpty else { return }
         isAddingMachine = true
         machineError = nil
         Task {

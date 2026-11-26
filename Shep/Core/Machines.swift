@@ -46,6 +46,14 @@ struct Machine: Identifiable, Equatable, Codable {
         return all.filter { names.insert($0.machine.name).inserted }.sorted { $0.machine.name < $1.machine.name }
     }
 
+    /// The SSH target of the text that the user typed: without spaces around it and without a `ssh` command before it.
+    static func target(fromInput input: String) -> String {
+        let text = input.trimmingCharacters(in: .whitespaces)
+        let words = text.split(separator: " ", maxSplits: 1)
+        guard words.count == 2, words[0] == "ssh" else { return text }
+        return words[1].trimmingCharacters(in: .whitespaces)
+    }
+
     /// The parameters of `machine.add` that add this machine again with the same name.
     var addParameters: JSONValue {
         var parameters: JSONValue = ["name": .string(name), isCommand ? "via" : "target": .string(target)]

@@ -194,7 +194,7 @@ final class AppModel {
 
     /// Adds a machine by its SSH target. Returns the error text, or nil if the machine was added.
     func addMachine(target: String) async -> String? {
-        await addMachine(["target": .string(target)])
+        await addMachine(["target": .string(Machine.target(fromInput: target))])
     }
 
     private func addMachine(_ parameters: JSONValue) async -> String? {

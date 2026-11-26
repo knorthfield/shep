@@ -24,6 +24,15 @@ struct MachinesTests {
         #expect(machines[1].addParameters == ["name": "fly", "via": "fly ssh console -C"])
     }
 
+    @Test func theTargetOfTypedTextHasNoSpacesAroundItAndNoSshCommandBeforeIt() {
+        #expect(Machine.target(fromInput: "ssh ankh-morpork.exe.xyz") == "ankh-morpork.exe.xyz")
+        #expect(Machine.target(fromInput: "  ssh   kris@box:2222 ") == "kris@box:2222")
+        #expect(Machine.target(fromInput: "kris@box") == "kris@box")
+        #expect(Machine.target(fromInput: "sshbox") == "sshbox")
+        #expect(Machine.target(fromInput: "ssh") == "ssh")
+        #expect(Machine.target(fromInput: "  ") == "")
+    }
+
     @Test func theSidebarShowsEachMachineOneTimeByNameAndAPausedMachineAsPaused() {
         let machine = { Machine(name: $0, target: $0, state: .connected, reason: "") }
         let list = Machine.sidebarList(
