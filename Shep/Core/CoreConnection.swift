@@ -8,6 +8,9 @@ struct CoreError: Error, Equatable {
     var kind: String?
     var hint: String?
 
+    /// The message and the hint, for the user.
+    var text: String { [message, hint].compactMap { $0 }.joined(separator: " ") }
+
     static let disconnected = CoreError(message: "The connection to herdr-core closed.", kind: "disconnected")
     static let timedOut = CoreError(message: "herdr-core did not answer.", kind: "timeout")
 }

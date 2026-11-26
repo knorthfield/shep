@@ -148,6 +148,8 @@ private struct MachineSettings: View {
     @State private var newMachineTarget = ""
     @State private var machineError: String?
     @State private var isAddingMachine = false
+    /// The target that the user tried to add, if that machine has no hc.
+    @State private var targetWithoutHc: String?
 
     var body: some View {
         Section {
@@ -176,9 +178,19 @@ private struct MachineSettings: View {
                 Button("Add", action: addMachine)
                     .disabled(Machine.target(fromInput: newMachineTarget).isEmpty || isAddingMachine)
             }
+            if let targetWithoutHc {
+                LabeledContent {
+                    Button(isAddingMachine ? "Installing…" : "Install and Add") { installHcAndAddMachine(target: targetWithoutHc) }
+                        .disabled(isAddingMachine)
+                } label: {
+                    Text("herdr-core is not installed on \(targetWithoutHc).")
+                    Text("Shep can copy the hc command of this Mac to it, then add the machine.")
+                }
+            }
             if let machineError {
                 Text(machineError)
                     .foregroundStyle(.red)
+                    .textSelection(.enabled)
             }
         } footer: {
             Text("A machine is a computer that you connect to with SSH, as in `ssh user@host`. It must have herdr-core. Its spaces and agents show in the sidebar. Pause a machine to stop the connection to it: its terminals continue to run, and they show again when you resume it.")
@@ -197,17 +209,38 @@ private struct MachineSettings: View {
 
     private func addMachine() {
         guard !Machine.target(fromInput: newMachineTarget).isEmpty else { return }
+        let target = Machine.target(fromInput: newMachineTarget)
+        isAddingMachine = true
+        machineError = nil
+        targetWithoutHc = nil
+        Task {
+            let error = await model.addMachine(target: target)
+            if error?.kind == "hc_missing" {
+                targetWithoutHc = target
+            } else {
+                machineError = error?.text
+            }
+            if error == nil { newMachineTarget = "" }
+            isAddingMachine = false
+        }
+    }
+
+    private func installHcAndAddMachine(target: String) {
         isAddingMachine = true
         machineError = nil
         Task {
-            machineError = await model.addMachine(target: newMachineTarget)
-            if machineError == nil { newMachineTarget = "" }
+            machineError = await model.installHcAndAddMachine(target: target)
+            if machineError == nil {
+                targetWithoutHc = nil
+                newMachineTarget = ""
+            }
             isAddingMachine = false
         }
     }
 
     private func resume(_ machine: Machine) {
         machineError = nil
+        targetWithoutHc = nil
         Task { machineError = await model.resumeMachine(machine) }
     }
 }

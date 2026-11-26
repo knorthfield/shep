@@ -192,20 +192,39 @@ final class AppModel {
 
     // MARK: Machines
 
-    /// Adds a machine by its SSH target. Returns the error text, or nil if the machine was added.
-    func addMachine(target: String) async -> String? {
+    /// Adds a machine by its SSH target. Returns the error, or nil if the machine was added.
+    func addMachine(target: String) async -> CoreError? {
         await addMachine(["target": .string(Machine.target(fromInput: target))])
     }
 
-    private func addMachine(_ parameters: JSONValue) async -> String? {
-        guard let connection else { return "Shep has no connection to herdr-core." }
+    private func addMachine(_ parameters: JSONValue) async -> CoreError? {
+        guard let connection else { return CoreError(message: "Shep has no connection to herdr-core.") }
         do {
             _ = try await connection.call("machine.add", parameters, timeout: .seconds(60))
             return nil
         } catch {
-            let error = error as? CoreError
-            return [error?.message, error?.hint].compactMap { $0 }.joined(separator: " ")
+            return error as? CoreError ?? CoreError(message: error.localizedDescription)
         }
+    }
+
+    /// Copies the hc of this Mac to a machine that has none, then adds the machine. The core cannot do this,
+    /// thus the `hc` command does it. Returns the error text, or nil if the machine was added.
+    func installHcAndAddMachine(target: String) async -> String? {
+        guard let hc = HcBinary.find(configuredPath: UserDefaults.standard.string(forKey: SettingsKey.hcPath)) else {
+            return "Shep did not find hc on this Mac."
+        }
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = hc
+        process.arguments = ["machine", "add", "--json", "--install", "--", Machine.target(fromInput: target)]
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = output
+        process.standardError = output
+        do { try process.run() } catch { return error.localizedDescription }
+        let reading = output.fileHandleForReading
+        let printed = await Task.detached { reading.readDataToEndOfFile() }.value
+        if let connection { await readMachines(on: connection) }
+        return HcBinary.machineAddError(inOutput: printed)
     }
 
     func removeMachine(_ machine: Machine) {
@@ -230,7 +249,7 @@ final class AppModel {
             if let connection { await readMachines(on: connection) }
             pausedMachines.removeAll { $0.name == machine.name }
         }
-        return error
+        return error?.text
     }
 
     private static func storedPausedMachines() -> [Machine] {

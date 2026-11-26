@@ -23,4 +23,14 @@ enum HcBinary {
         ]
         return candidates.first(where: isExecutable).map { URL(fileURLWithPath: $0) }
     }
+
+    /// The error of `hc machine add --json`, from all that it printed. Nil if hc added the machine.
+    static func machineAddError(inOutput output: Data) -> String? {
+        let text = String(decoding: output, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let lastLine = text.split(whereSeparator: \.isNewline).last else { return "hc gave no answer." }
+        guard let reply = JSONValue(json: Data(lastLine.utf8)) else { return text }
+        let error = reply["error"]
+        guard !error.isNull else { return nil }
+        return CoreError(message: error["message"].string ?? text, hint: error["hint"].string).text
+    }
 }

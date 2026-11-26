@@ -126,6 +126,15 @@ struct CoreConnectionTests {
 struct HcBinaryTests {
     private let home = URL(fileURLWithPath: "/Users/someone")
 
+    @Test func theErrorOfAMachineAddIsReadFromTheLastLineThatHcPrinted() {
+        let added = "box now has hc 0.1.17\n{\"name\":\"box\",\"target\":\"box\"}\n"
+        let failed = #"{"error":{"hint":"check the keys","kind":"unreachable","message":"cannot reach box"}}"# + "\n"
+        #expect(HcBinary.machineAddError(inOutput: Data(added.utf8)) == nil)
+        #expect(HcBinary.machineAddError(inOutput: Data(failed.utf8)) == "cannot reach box check the keys")
+        #expect(HcBinary.machineAddError(inOutput: Data("error: unexpected argument\n".utf8)) == "error: unexpected argument")
+        #expect(HcBinary.machineAddError(inOutput: Data()) == "hc gave no answer.")
+    }
+
     @Test func thePathFromSettingsComesFirst() {
         let found = HcBinary.find(configuredPath: "/custom/hc", environmentPath: "/bin", home: home) { _ in true }
         #expect(found?.path == "/custom/hc")
