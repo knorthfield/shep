@@ -28,6 +28,10 @@ final class AppModel {
     private(set) var pausedMachines: [Machine] = AppModel.storedPausedMachines() {
         didSet { UserDefaults.standard.set(try? JSONEncoder().encode(pausedMachines), forKey: SettingsKey.pausedMachines) }
     }
+    /// The names of the machines that show the pause controls. The user selects them in Settings.
+    private(set) var pausableMachines: Set<String> = AppModel.storedPausableMachines() {
+        didSet { UserDefaults.standard.set(pausableMachines.sorted(), forKey: SettingsKey.pausableMachines) }
+    }
     /// The machines that the sidebar shows: those of the core and the paused ones.
     var sidebarMachines: [(machine: Machine, isPaused: Bool)] {
         Machine.sidebarList(active: machines, paused: pausedMachines)
@@ -229,6 +233,7 @@ final class AppModel {
 
     func removeMachine(_ machine: Machine) {
         pausedMachines.removeAll { $0.name == machine.name }
+        pausableMachines.remove(machine.name)
         Task { _ = try? await connection?.call("machine.rm", ["machine": .string(machine.name)]) }
     }
 
@@ -250,6 +255,19 @@ final class AppModel {
             pausedMachines.removeAll { $0.name == machine.name }
         }
         return error?.text
+    }
+
+    /// Shows or hides the pause controls of a machine.
+    func setCanPause(_ canPause: Bool, machine name: String) {
+        if canPause { pausableMachines.insert(name) } else { pausableMachines.remove(name) }
+    }
+
+    /// Before this setting, each machine had the pause controls: a machine that is paused then keeps them.
+    private static func storedPausableMachines() -> Set<String> {
+        guard let names = UserDefaults.standard.stringArray(forKey: SettingsKey.pausableMachines) else {
+            return Set(storedPausedMachines().map(\.name))
+        }
+        return Set(names)
     }
 
     private static func storedPausedMachines() -> [Machine] {

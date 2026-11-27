@@ -10,6 +10,8 @@ enum SettingsKey {
     /// The font family of the terminals. Empty: the monospaced font of macOS.
     static let fontName = "FontName"
     static let pausedMachines = "PausedMachines"
+    /// The names of the machines that show the pause controls.
+    static let pausableMachines = "PausableMachines"
 
     static let standardFontSize = 13.0
 
@@ -157,7 +159,14 @@ private struct MachineSettings: View {
                 LabeledContent(machine.name) {
                     Text(Self.description(of: machine))
                         .foregroundStyle(machine.state == .connected ? .secondary : .primary)
-                    Button("Pause") { model.pauseMachine(machine) }
+                    Toggle("Can Pause", isOn: Binding(
+                        get: { model.pausableMachines.contains(machine.name) },
+                        set: { model.setCanPause($0, machine: machine.name) }
+                    ))
+                    .toggleStyle(.checkbox)
+                    if model.pausableMachines.contains(machine.name) {
+                        Button("Pause") { model.pauseMachine(machine) }
+                    }
                     Button("Remove") { model.removeMachine(machine) }
                 }
             }
@@ -193,7 +202,7 @@ private struct MachineSettings: View {
                     .textSelection(.enabled)
             }
         } footer: {
-            Text("A machine is a computer that you connect to with SSH, as in `ssh user@host`. It must have herdr-core. Its spaces and agents show in the sidebar. Pause a machine to stop the connection to it: its terminals continue to run, and they show again when you resume it.")
+            Text("A machine is a computer that you connect to with SSH, as in `ssh user@host`. It must have herdr-core. Its spaces and agents show in the sidebar. Select Can Pause for a machine that must not stay connected, for example a virtual machine. Pause that machine to stop the connection to it: its terminals continue to run, and they show again when you resume it.")
                 .foregroundStyle(.secondary)
         }
     }

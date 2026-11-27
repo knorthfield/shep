@@ -72,11 +72,15 @@ struct Sidebar: View {
                 if machine.state == .connected {
                     headerButton("New Space on \(machine.name)", symbol: "plus") { model.newSpace(machine: machine.name) }
                 }
-                headerButton("Pause \(machine.name)", symbol: "pause.fill") { model.pauseMachine(machine) }
+                if model.pausableMachines.contains(machine.name) {
+                    headerButton("Pause \(machine.name)", symbol: "pause.fill") { model.pauseMachine(machine) }
+                }
                 MachineStateDot(state: machine.state, reason: machine.reason)
             }
             .contextMenu {
-                Button("Pause") { model.pauseMachine(machine) }
+                if model.pausableMachines.contains(machine.name) {
+                    Button("Pause") { model.pauseMachine(machine) }
+                }
             }
             spaceRows(onMachine: machine.name)
         }
